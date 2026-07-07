@@ -14,6 +14,17 @@ export const BLEND_MODES = [
   { value: 1, label: 'Difference' },
   { value: 2, label: 'Average' },
   { value: 3, label: 'Min' },
+  { value: 4, label: 'Max' },
+  { value: 5, label: 'Screen' },
+  { value: 6, label: 'Add' },
+  { value: 7, label: 'Subtract' },
+]
+
+export const COLOR_MODES = [
+  { value: 0, label: 'Duotone' },
+  { value: 1, label: 'Gradient' },
+  { value: 2, label: 'Rainbow' },
+  { value: 3, label: 'Per-layer' },
 ]
 
 export const AA_MODES = [
@@ -22,6 +33,8 @@ export const AA_MODES = [
   { value: 2, label: 'Supersample 4×' },
   { value: 3, label: 'Supersample 16×' },
 ]
+
+const LAYER_COLORS = ['#ff5c7a', '#5cc8ff', '#ffd166', '#9b5cff']
 
 function makeLayer(freq = 140, rot = 0, x = 0, y = 0) {
   return { freq, rot, x, y }
@@ -37,15 +50,17 @@ export function defaultSettings() {
     thickness: 0.5,
     animate: false,
     animSpeed: 1,
+    colorMode: 0,
     colorA: '#0b0b0f',
     colorB: '#f5f5f0',
+    colorC: '#ff4d6d',
     activeLayer: 0,
     layers: [
       makeLayer(140, 0, -0.06, 0),
       makeLayer(143, 0, 0.06, 0),
       makeLayer(150, 0.5, 0, 0.1),
       makeLayer(160, -0.5, 0, -0.1),
-    ],
+    ].map((l, i) => ({ ...l, color: LAYER_COLORS[i] })),
   }
 }
 
@@ -108,7 +123,7 @@ export function applyPreset(preset) {
 
 const SNAP_KEYS = [
   'patternType', 'blendMode', 'aaMode', 'layerCount', 'zoom',
-  'thickness', 'animate', 'animSpeed', 'colorA', 'colorB',
+  'thickness', 'animate', 'animSpeed', 'colorMode', 'colorA', 'colorB', 'colorC',
 ]
 
 export function snapshot() {
@@ -119,6 +134,7 @@ export function snapshot() {
     rot: +l.rot.toFixed(4),
     x: +l.x.toFixed(4),
     y: +l.y.toFixed(4),
+    color: l.color,
   }))
   return s
 }

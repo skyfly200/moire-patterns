@@ -24,9 +24,12 @@ function makeUniforms() {
     uLayerCount: { value: 2 },
     uBlendMode: { value: 0 },
     uAAMode: { value: 0 },
+    uColorMode: { value: 0 },
     uThickness: { value: 0.5 },
     uColorA: { value: new THREE.Color('#0b0b0f') },
     uColorB: { value: new THREE.Color('#f5f5f0') },
+    uColorC: { value: new THREE.Color('#ff4d6d') },
+    uLayerColor: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Color()) },
     uOffset: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
     uFreq: { value: new Array(MAX_LAYERS).fill(140) },
     uRot: { value: new Array(MAX_LAYERS).fill(0) },
@@ -40,14 +43,17 @@ function syncUniforms() {
   u.uLayerCount.value = settings.layerCount
   u.uBlendMode.value = settings.blendMode
   u.uAAMode.value = settings.aaMode
+  u.uColorMode.value = settings.colorMode
   u.uThickness.value = settings.thickness
   u.uColorA.value.copy(colorA.set(settings.colorA))
   u.uColorB.value.copy(colorB.set(settings.colorB))
+  u.uColorC.value.set(settings.colorC)
   for (let i = 0; i < MAX_LAYERS; i++) {
     const l = settings.layers[i]
     u.uOffset.value[i].set(l.x, l.y)
     u.uFreq.value[i] = l.freq
     u.uRot.value[i] = l.rot
+    u.uLayerColor.value[i].set(l.color)
   }
 }
 
@@ -218,7 +224,8 @@ onBeforeUnmount(() => {
       @wheel="onWheel"
     />
     <div class="hint">
-      drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · H: hide UI · F: fullscreen
+      drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · space: play/pause ·
+      ↑↓: speed · R: randomize · H: hide UI · F: fullscreen
     </div>
     <div v-if="recState.active" class="rec-badge">● REC</div>
   </div>
