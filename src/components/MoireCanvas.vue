@@ -218,7 +218,8 @@ onBeforeUnmount(() => {
       @wheel="onWheel"
     />
     <div class="hint">
-      drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · H: hide UI · F: fullscreen
+      drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · space: play/pause ·
+      ↑↓: speed · R: randomize · H: hide UI · F: fullscreen
     </div>
     <div v-if="recState.active" class="rec-badge">● REC</div>
   </div>

@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import MoireCanvas from './components/MoireCanvas.vue'
 import ControlPanel from './components/ControlPanel.vue'
-import { loadFromHash } from './settings.js'
+import { settings, loadFromHash, randomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 
 const canvasRef = ref(null)
@@ -20,8 +20,20 @@ function toggleFullscreen() {
 
 function onKey(e) {
   if (e.target.closest('input, select, textarea')) return
-  if (e.key === 'h' || e.key === 'H') panelVisible.value = !panelVisible.value
-  if (e.key === 'f' || e.key === 'F') toggleFullscreen()
+  const key = e.key.toLowerCase()
+  if (key === 'h') panelVisible.value = !panelVisible.value
+  else if (key === 'f') toggleFullscreen()
+  else if (key === 'r') randomize()
+  else if (key === ' ' || key === 'a') {
+    // Space on a focused button should click the button, not toggle playback.
+    if (key === ' ' && e.target.closest('button')) return
+    e.preventDefault()
+    settings.animate = !settings.animate
+  } else if (key === 'arrowup' || key === 'arrowdown') {
+    e.preventDefault()
+    const delta = key === 'arrowup' ? 0.1 : -0.1
+    settings.animSpeed = +Math.min(4, Math.max(0.1, settings.animSpeed + delta)).toFixed(1)
+  }
 }
 
 onMounted(() => {

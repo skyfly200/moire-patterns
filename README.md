@@ -22,6 +22,8 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   copy a share link that encodes the full pattern state in the URL
 - **Video capture** — record the canvas to a WebM video with one click
 - **Full-screen view** — hide the control panel (`H`) or go fullscreen (`F`)
+- **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
+  resets), `↑`/`↓` animation speed, `R` randomize, `H` hide UI, `F` fullscreen
 
 ## Where the moiré comes from
 
