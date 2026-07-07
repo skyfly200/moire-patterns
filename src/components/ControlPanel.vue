@@ -6,6 +6,7 @@ import {
   PATTERN_TYPES,
   BLEND_MODES,
   AA_MODES,
+  COLOR_MODES,
   applyPreset,
   randomize,
   shareURL,
@@ -109,10 +110,28 @@ function setRotDeg(layer, deg) {
         <input type="range" min="0.05" max="0.95" step="0.01" v-model.number="settings.thickness" />
         <b>{{ settings.thickness.toFixed(2) }}</b>
       </label>
+      <label class="row">
+        <span>Color mode</span>
+        <select v-model.number="settings.colorMode">
+          <option v-for="c in COLOR_MODES" :key="c.value" :value="c.value">
+            {{ c.label }}
+          </option>
+        </select>
+      </label>
       <div class="row colors">
         <span>Colors</span>
         <input type="color" v-model="settings.colorA" title="Background" />
-        <input type="color" v-model="settings.colorB" title="Foreground" />
+        <input
+          v-if="settings.colorMode === 0 || settings.colorMode === 1"
+          type="color" v-model="settings.colorB"
+          :title="settings.colorMode === 1 ? 'Gradient middle' : 'Foreground'"
+        />
+        <input
+          v-if="settings.colorMode === 1"
+          type="color" v-model="settings.colorC" title="Gradient end"
+        />
+        <em v-if="settings.colorMode === 2" class="note">hue follows pattern</em>
+        <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
       </div>
     </section>
 
@@ -138,6 +157,11 @@ function setRotDeg(layer, deg) {
         >
           Layer {{ i }}
         </button>
+        <input
+          v-if="settings.colorMode === 3"
+          type="color" v-model="settings.layers[i - 1].color"
+          class="layer-color" title="Layer color"
+        />
         <span v-if="settings.activeLayer === i - 1" class="tag">drag target</span>
       </h2>
       <label class="row">
@@ -379,6 +403,15 @@ button.rec {
 .layer-tab.active {
   border-color: #7c6cf0;
   color: #cfc8ff;
+}
+.note {
+  font-size: 11px;
+  font-style: normal;
+  color: #75757f;
+}
+.layer-color {
+  width: 26px !important;
+  height: 20px !important;
 }
 .tag {
   font-size: 10px;

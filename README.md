@@ -10,7 +10,11 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 
 - **Four grating types** — concentric rings, parallel lines, grids, and radial spokes
 - **Up to 4 layers**, each with its own frequency, rotation, and center offset
-- **Blend modes** — multiply, difference (XOR-like), average, min
+- **Blend modes** — multiply, difference (XOR-like), average, min, max,
+  screen, add, subtract
+- **Color modes** — duotone, three-stop gradient, rainbow (hue follows the
+  pattern value — richest with the Average blend), and per-layer colors
+  screen-composited over the background
 - **Anti-aliasing controls** straight from the Reddit thread: point-sampled
   (aliased, maximum moiré), `fwidth()` smoothstep, and 4×/16× supersampling —
   so you can watch sampling moiré appear and disappear
