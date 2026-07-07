@@ -1,4 +1,5 @@
 <script setup>
+import { ref, computed } from 'vue'
 import {
   settings,
   PRESETS,
@@ -7,9 +8,39 @@ import {
   AA_MODES,
   applyPreset,
   randomize,
+  shareURL,
+  encodeSnapshot,
 } from '../settings.js'
+import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
+import { recState } from '../recorder.js'
 
-defineEmits(['export'])
+defineEmits(['export', 'record', 'save'])
+
+const copiedId = ref(null)
+let copiedTimer = null
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    window.prompt('Copy this link:', text)
+  }
+}
+
+async function copyShare(entry = null) {
+  const url = entry ? shareURL(entry.snap) : shareURL()
+  if (!entry) history.replaceState(null, '', '#s=' + encodeSnapshot())
+  await copyText(url)
+  copiedId.value = entry ? entry.id : 'current'
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => (copiedId.value = null), 1500)
+}
+
+const recTime = computed(() => {
+  const m = Math.floor(recState.seconds / 60)
+  const s = String(recState.seconds % 60).padStart(2, '0')
+  return `${m}:${s}`
+})
 
 function rotDeg(layer) {
   return Math.round((layer.rot * 180) / Math.PI)
@@ -136,7 +167,35 @@ function setRotDeg(layer, deg) {
     </section>
 
     <section>
-      <button class="accent wide" @click="$emit('export')">Export PNG</button>
+      <h2>Capture &amp; Share</h2>
+      <button class="wide" @click="$emit('export')">Export PNG</button>
+      <button class="wide" :class="{ rec: recState.active }" @click="$emit('record')">
+        <template v-if="recState.active">■ Stop recording · {{ recTime }}</template>
+        <template v-else>● Record video (WebM)</template>
+      </button>
+      <button class="wide" @click="copyShare()">
+        {{ copiedId === 'current' ? 'Link copied!' : 'Copy share link' }}
+      </button>
+      <button class="accent wide" @click="$emit('save')">Save to gallery</button>
+    </section>
+
+    <section v-if="gallery.length">
+      <h2>Gallery</h2>
+      <div class="gallery">
+        <div v-for="e in gallery" :key="e.id" class="entry">
+          <img
+            :src="e.thumb"
+            :title="'Load — saved ' + new Date(e.date).toLocaleString()"
+            @click="loadFromGallery(e)"
+          />
+          <div class="entry-actions">
+            <button :title="copiedId === e.id ? 'Copied!' : 'Copy share link'" @click="copyShare(e)">
+              {{ copiedId === e.id ? '✓' : '🔗' }}
+            </button>
+            <button title="Delete" @click="removeFromGallery(e.id)">✕</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <footer>
@@ -262,6 +321,49 @@ button.accent:hover {
 button.wide {
   width: 100%;
   padding: 9px;
+}
+button.rec {
+  border-color: rgba(255, 92, 92, 0.55);
+  color: #ff8a8a;
+}
+.gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.entry {
+  position: relative;
+  border: 1px solid #2c2c36;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.entry img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+.entry img:hover {
+  opacity: 0.8;
+}
+.entry-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.entry:hover .entry-actions {
+  opacity: 1;
+}
+.entry-actions button {
+  padding: 2px 6px;
+  font-size: 11px;
+  background: rgba(12, 12, 16, 0.8);
 }
 .layer-head {
   display: flex;

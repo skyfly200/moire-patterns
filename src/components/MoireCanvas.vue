@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 import * as THREE from 'three'
 import { vertexShader, fragmentShader } from '../shaders/moire.js'
 import { settings, MAX_LAYERS } from '../settings.js'
+import { recState } from '../recorder.js'
 
 const container = ref(null)
 const canvas = ref(null)
@@ -106,19 +107,78 @@ function onWheel(e) {
   settings.zoom = Math.min(4, Math.max(0.25, settings.zoom * factor))
 }
 
-function exportPNG() {
-  renderer.render(scene, camera)
-  canvas.value.toBlob((blob) => {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'moire-pattern.png'
-    a.click()
-    URL.revokeObjectURL(url)
-  })
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-defineExpose({ exportPNG })
+function exportPNG() {
+  renderer.render(scene, camera)
+  canvas.value.toBlob((blob) => download(blob, 'moire-pattern.png'))
+}
+
+function captureThumb(w = 160, h = 100) {
+  renderer.render(scene, camera)
+  const src = canvas.value
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  // Cover-crop the canvas into the thumbnail.
+  const scale = Math.max(w / src.width, h / src.height)
+  const sw = w / scale
+  const sh = h / scale
+  c.getContext('2d').drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, w, h)
+  return c.toDataURL('image/jpeg', 0.8)
+}
+
+// Video capture of the canvas via MediaRecorder (WebM).
+let mediaRecorder = null
+let recChunks = []
+let recTimer = null
+let restoreAnimate = false
+
+function toggleRecording() {
+  if (recState.active) {
+    mediaRecorder?.stop()
+    return
+  }
+  const stream = canvas.value.captureStream(60)
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9'
+    : 'video/webm'
+  mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12_000_000 })
+  recChunks = []
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size) recChunks.push(e.data)
+  }
+  mediaRecorder.onstop = () => {
+    clearInterval(recTimer)
+    recState.active = false
+    if (restoreAnimate) {
+      settings.animate = false
+      restoreAnimate = false
+    }
+    stream.getTracks().forEach((t) => t.stop())
+    download(new Blob(recChunks, { type: 'video/webm' }), 'moire-pattern.webm')
+    recChunks = []
+  }
+  // A recording of a frozen pattern is rarely what anyone wants — turn
+  // animation on for the take and restore the previous state afterwards.
+  if (!settings.animate) {
+    settings.animate = true
+    restoreAnimate = true
+  }
+  recState.active = true
+  recState.seconds = 0
+  recTimer = setInterval(() => recState.seconds++, 1000)
+  mediaRecorder.start()
+}
+
+defineExpose({ exportPNG, captureThumb, toggleRecording })
 
 onMounted(() => {
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: false })
@@ -139,6 +199,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (recState.active) mediaRecorder?.stop()
   cancelAnimationFrame(rafId)
   resizeObserver?.disconnect()
   material?.dispose()
@@ -156,7 +217,10 @@ onBeforeUnmount(() => {
       @pointercancel="onPointerUp"
       @wheel="onWheel"
     />
-    <div class="hint">drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom</div>
+    <div class="hint">
+      drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · H: hide UI · F: fullscreen
+    </div>
+    <div v-if="recState.active" class="rec-badge">● REC</div>
   </div>
 </template>
 
@@ -176,6 +240,26 @@ canvas {
 }
 canvas:active {
   cursor: grabbing;
+}
+.rec-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #ff5c5c;
+  background: rgba(12, 12, 16, 0.65);
+  border: 1px solid rgba(255, 92, 92, 0.4);
+  border-radius: 999px;
+  pointer-events: none;
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 .hint {
   position: absolute;

@@ -106,6 +106,62 @@ export function applyPreset(preset) {
   a.layers.forEach((l, i) => Object.assign(settings.layers[i], l))
 }
 
+const SNAP_KEYS = [
+  'patternType', 'blendMode', 'aaMode', 'layerCount', 'zoom',
+  'thickness', 'animate', 'animSpeed', 'colorA', 'colorB',
+]
+
+export function snapshot() {
+  const s = { v: 1 }
+  for (const k of SNAP_KEYS) s[k] = settings[k]
+  s.layers = settings.layers.map((l) => ({
+    freq: +l.freq.toFixed(2),
+    rot: +l.rot.toFixed(4),
+    x: +l.x.toFixed(4),
+    y: +l.y.toFixed(4),
+  }))
+  return s
+}
+
+export function applySnapshot(s) {
+  for (const k of SNAP_KEYS) if (s[k] !== undefined) settings[k] = s[k]
+  if (Array.isArray(s.layers)) {
+    s.layers.forEach((l, i) => {
+      if (settings.layers[i]) Object.assign(settings.layers[i], l)
+    })
+  }
+  settings.activeLayer = 0
+}
+
+export function encodeSnapshot(s = snapshot()) {
+  const bytes = new TextEncoder().encode(JSON.stringify(s))
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+export function decodeSnapshot(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/')
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
+export function shareURL(snap) {
+  return `${location.origin}${location.pathname}#s=${encodeSnapshot(snap)}`
+}
+
+export function loadFromHash() {
+  const m = location.hash.match(/[#&]s=([A-Za-z0-9_-]+)/)
+  if (!m) return false
+  try {
+    applySnapshot(decodeSnapshot(m[1]))
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function randomize() {
   const rnd = (min, max) => min + Math.random() * (max - min)
   settings.patternType = Math.floor(rnd(0, 4))
