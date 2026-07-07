@@ -18,6 +18,10 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Direct manipulation** — drag on the canvas to move the active layer's
   center, scroll to zoom
 - **Presets + randomizer**, custom colors, and PNG export
+- **Save & share** — save favorites to a local gallery (with thumbnails) and
+  copy a share link that encodes the full pattern state in the URL
+- **Video capture** — record the canvas to a WebM video with one click
+- **Full-screen view** — hide the control panel (`H`) or go fullscreen (`F`)
 
 ## Where the moiré comes from
 
