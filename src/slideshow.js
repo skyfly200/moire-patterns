@@ -35,6 +35,12 @@ function items() {
   return gallery.length >= 2 ? gallery : PRESETS
 }
 
+// Advance one slide manually (also used by the on-beat "next slide" action;
+// works whether or not the display view is running).
+export function nextSlide() {
+  advance()
+}
+
 function advance() {
   const list = items()
   if (!list.length) return

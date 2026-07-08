@@ -72,6 +72,8 @@ function makeLayer(freq = 140, rot = 0, x = 0, y = 0, pattern = 0, op = 0) {
 export function defaultSettings() {
   return {
     aaMode: 0,
+    resScale: 0, // 0 = auto (device pixel ratio), else a fixed multiplier
+    showFps: false,
     layerCount: 2,
     zoom: 1,
     thickness: 0.5,
@@ -200,7 +202,7 @@ export function applyPreset(preset) {
 }
 
 const SNAP_KEYS = [
-  'aaMode', 'layerCount', 'zoom', 'thickness', 'animate', 'animSpeed',
+  'aaMode', 'resScale', 'layerCount', 'zoom', 'thickness', 'animate', 'animSpeed',
   'drift', 'colorMode', 'colorA', 'colorB', 'colorC', 'customExpr',
   'customShapeExpr',
 ]

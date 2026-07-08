@@ -19,6 +19,7 @@ import KeyBtn from './KeyBtn.vue'
 import { slideshow, SLIDESHOW_MODES } from '../slideshow.js'
 import {
   modState,
+  BEAT_ACTIONS,
   AUDIO_SOURCES,
   LEAP_SOURCES,
   MOD_TARGETS,
@@ -145,6 +146,19 @@ function setRotDeg(layer, deg) {
         </select>
         <KeyBtn path="aaMode" />
       </label>
+      <label class="row" title="Render resolution. Lower values improve smoothness on slower GPUs, especially with supersampling.">
+        <span>Resolution</span>
+        <select v-model.number="settings.resScale">
+          <option :value="0">Auto (sharp)</option>
+          <option :value="1">100%</option>
+          <option :value="0.75">75%</option>
+          <option :value="0.5">50% (fast)</option>
+        </select>
+      </label>
+      <label class="row">
+        <span>FPS counter</span>
+        <input type="checkbox" v-model="settings.showFps" />
+      </label>
       <label class="row">
         <span>Layers</span>
         <input type="range" min="1" max="8" step="1" v-model.number="settings.layerCount" />
@@ -247,6 +261,29 @@ function setRotDeg(layer, deg) {
         </span>
       </label>
       <p v-if="modState.audio.error" class="err">{{ modState.audio.error }}</p>
+      <div v-if="modState.audio.enabled" class="row">
+        <span>Beat</span>
+        <span class="beat-dot" :class="{ on: modState.audio.beat > 0.5 }" />
+        <em class="note">
+          {{ modState.audio.bpm ? '~' + modState.audio.bpm + ' BPM' : 'listening…' }}
+        </em>
+      </div>
+      <label v-if="modState.audio.enabled" class="row">
+        <span>On beat</span>
+        <select v-model="modState.beat.action">
+          <option v-for="a in BEAT_ACTIONS" :key="a.value" :value="a.value">
+            {{ a.label }}
+          </option>
+        </select>
+      </label>
+      <label v-if="modState.audio.enabled && modState.beat.action !== 'none'" class="row">
+        <span>Every</span>
+        <input
+          type="number" min="1" max="32" step="1" class="beat-every"
+          v-model.number="modState.beat.every"
+        />
+        <em class="note">beat{{ modState.beat.every === 1 ? '' : 's' }}</em>
+      </label>
       <label class="row">
         <span>MIDI</span>
         <input type="checkbox" :checked="modState.midi.enabled" @change="toggleMIDI" />
@@ -683,6 +720,28 @@ button.rec {
   font-size: 11px;
   color: #ff8a8a;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+.beat-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2c2c36;
+  transition: background 0.05s;
+}
+.beat-dot.on {
+  background: #ffd166;
+  box-shadow: 0 0 8px rgba(255, 209, 102, 0.8);
+}
+.beat-every {
+  width: 52px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: #e4e4e9;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
 }
 .meter {
   flex: 1;
