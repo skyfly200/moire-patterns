@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { vertexShader, fragmentShader } from '../shaders/moire.js'
 import { settings, MAX_LAYERS } from '../settings.js'
 import { recState } from '../recorder.js'
+import { timeline, applyTimeline } from '../timeline.js'
 
 const container = ref(null)
 const canvas = ref(null)
@@ -70,7 +71,13 @@ function frame(now) {
   rafId = requestAnimationFrame(frame)
   const dt = Math.min((now - lastFrame) / 1000, 0.1)
   lastFrame = now
-  if (settings.animate) animTime += dt * settings.animSpeed
+  if (settings.animate) {
+    if (settings.drift) animTime += dt * settings.animSpeed
+    if (timeline.tracks.length) {
+      timeline.time = (timeline.time + dt) % timeline.duration
+      applyTimeline(timeline.time)
+    }
+  }
   material.uniforms.uAnimTime.value = animTime
   syncUniforms()
   renderer.render(scene, camera)

@@ -18,7 +18,13 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Anti-aliasing controls** straight from the Reddit thread: point-sampled
   (aliased, maximum moiré), `fwidth()` smoothstep, and 4×/16× supersampling —
   so you can watch sampling moiré appear and disappear
-- **Animation** — layers slowly counter-rotate and orbit
+- **Animation** — layers slowly counter-rotate and orbit (the "drift"
+  animation, toggleable)
+- **Keyframe timeline** — every control has a ◆ button that keyframes it at
+  the current timeline position; tracks interpolate with selectable easing
+  curves (linear, ease-in, ease-out, ease-in-out, hold), colors blend
+  smoothly, discrete options step, and the whole timeline loops, records to
+  video, and travels inside share links and gallery saves
 - **Direct manipulation** — drag on the canvas to move the active layer's
   center, scroll to zoom
 - **Presets + randomizer**, custom colors, and PNG export
