@@ -62,16 +62,28 @@ function syncUniforms() {
 function resize() {
   const w = container.value.clientWidth
   const h = container.value.clientHeight
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  renderer.setPixelRatio(dpr)
+  const scale = settings.resScale === 0
+    ? Math.min(window.devicePixelRatio || 1, 2)
+    : settings.resScale
+  renderer.setPixelRatio(scale)
   renderer.setSize(w, h, false)
-  material.uniforms.uResolution.value.set(w * dpr, h * dpr)
+  material.uniforms.uResolution.value.set(w * scale, h * scale)
 }
+
+const fps = ref(0)
+let fpsFrames = 0
+let fpsWindowStart = 0
 
 function frame(now) {
   rafId = requestAnimationFrame(frame)
   const dt = Math.min((now - lastFrame) / 1000, 0.1)
   lastFrame = now
+  fpsFrames++
+  if (now - fpsWindowStart >= 500) {
+    fps.value = Math.round((fpsFrames * 1000) / (now - fpsWindowStart))
+    fpsFrames = 0
+    fpsWindowStart = now
+  }
   if (settings.animate) {
     if (settings.drift) animTime += dt * settings.animSpeed * 0.25
     if (timeline.tracks.length) {
@@ -245,6 +257,7 @@ onMounted(() => {
       exprTimer = setTimeout(rebuildShader, 350)
     },
   )
+  watch(() => settings.resScale, resize)
 
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(container.value)
@@ -278,6 +291,7 @@ onBeforeUnmount(() => {
       ↑↓: speed · R: randomize · S: display view (Esc exits) · H: hide UI · F: fullscreen
     </div>
     <div v-if="recState.active" class="rec-badge">● REC</div>
+    <div v-if="settings.showFps" class="fps">{{ fps }} fps</div>
   </div>
 </template>
 
@@ -297,6 +311,19 @@ canvas {
 }
 canvas:active {
   cursor: grabbing;
+}
+.fps {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #9ee493;
+  background: rgba(12, 12, 16, 0.65);
+  border: 1px solid #26262e;
+  border-radius: 999px;
+  pointer-events: none;
 }
 .rec-badge {
   position: absolute;

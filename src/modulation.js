@@ -1,6 +1,8 @@
 import { reactive } from 'vue'
 import { setParam, trackLabel } from './timeline.js'
 import { MAX_LAYERS } from './shaders/moire.js'
+import { settings, randomize } from './settings.js'
+import { nextSlide } from './slideshow.js'
 
 // Live-input modulation: audio (microphone), MIDI controllers, and a Leap
 // Motion controller each expose normalized 0..1 sources that can be mapped
@@ -12,6 +14,14 @@ export const AUDIO_SOURCES = [
   { value: 'audio.bass', label: 'Audio · bass' },
   { value: 'audio.mid', label: 'Audio · mid' },
   { value: 'audio.treble', label: 'Audio · treble' },
+  { value: 'audio.beat', label: 'Audio · beat pulse' },
+]
+
+export const BEAT_ACTIONS = [
+  { value: 'none', label: 'Nothing' },
+  { value: 'randomize', label: 'Randomize pattern' },
+  { value: 'colors', label: 'Random colors' },
+  { value: 'slide', label: 'Next display slide' },
 ]
 
 export const LEAP_SOURCES = [
@@ -39,7 +49,8 @@ export const MOD_TARGETS = (() => {
 })()
 
 export const modState = reactive({
-  audio: { enabled: false, error: '', level: 0, bass: 0, mid: 0, treble: 0 },
+  audio: { enabled: false, error: '', level: 0, bass: 0, mid: 0, treble: 0, beat: 0, bpm: 0 },
+  beat: { action: 'none', every: 1, count: 0 },
   midi: { enabled: false, error: '', inputs: 0, lastCC: null, values: {} },
   leap: {
     enabled: false, error: '', connected: false, hands: 0,
@@ -78,14 +89,20 @@ export function resetMappingRange(m) {
 }
 
 export function modSnapshot() {
-  if (!modState.mappings.length) return undefined
-  return modState.mappings.map(({ source, path, min, max, smooth }) => ({
+  const list = modState.mappings.map(({ source, path, min, max, smooth }) => ({
     source, path, min, max, smooth,
   }))
+  const beat = modState.beat.action !== 'none'
+    ? { action: modState.beat.action, every: modState.beat.every }
+    : undefined
+  if (!list.length && !beat) return undefined
+  return { list, beat }
 }
 
 export function modApply(mods) {
-  modState.mappings = (Array.isArray(mods) ? mods : []).map((m) => ({
+  // v2 snapshots stored a bare array of mappings; newer ones wrap it.
+  const list = Array.isArray(mods) ? mods : mods?.list || []
+  modState.mappings = list.map((m) => ({
     id: 'm' + ++nextId + Math.random().toString(36).slice(2, 6),
     source: m.source,
     path: m.path,
@@ -93,6 +110,10 @@ export function modApply(mods) {
     max: +m.max,
     smooth: +m.smooth || 0,
   }))
+  const beat = !Array.isArray(mods) && mods?.beat
+  modState.beat.action = beat ? beat.action : 'none'
+  modState.beat.every = beat ? Math.max(1, +beat.every || 1) : 1
+  modState.beat.count = 0
 }
 
 // --- Audio (Web Audio API, microphone) ---------------------------------
@@ -124,7 +145,67 @@ export function stopAudio() {
   mediaStream?.getTracks().forEach((t) => t.stop())
   audioCtx?.close()
   audioCtx = analyser = mediaStream = freqData = null
-  Object.assign(modState.audio, { enabled: false, level: 0, bass: 0, mid: 0, treble: 0 })
+  bassHistory = []
+  beatIntervals = []
+  lastBeatAt = 0
+  Object.assign(modState.audio, {
+    enabled: false, level: 0, bass: 0, mid: 0, treble: 0, beat: 0, bpm: 0,
+  })
+}
+
+// Beat detection: energy-based onset detection on the bass band — a beat is
+// a bass level well above its recent average, with a refractory period so
+// one kick registers once.
+let bassHistory = []
+let lastBeatAt = 0
+let beatIntervals = []
+
+function hslToHex(h, s, l) {
+  const a = s * Math.min(l, 1 - l)
+  const f = (n) => {
+    const k = (n + h / 30) % 12
+    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(c * 255).toString(16).padStart(2, '0')
+  }
+  return '#' + f(0) + f(8) + f(4)
+}
+
+function fireBeatAction() {
+  modState.beat.count++
+  if (modState.beat.action === 'none') return
+  if (modState.beat.count % Math.max(1, modState.beat.every) !== 0) return
+  if (modState.beat.action === 'randomize') {
+    randomize()
+  } else if (modState.beat.action === 'colors') {
+    const hue = Math.random() * 360
+    settings.colorA = hslToHex(hue, 0.5, 0.06)
+    settings.colorB = hslToHex((hue + 120 + Math.random() * 120) % 360, 0.85, 0.62)
+  } else if (modState.beat.action === 'slide') {
+    nextSlide()
+  }
+}
+
+function detectBeat() {
+  const bass = modState.audio.bass
+  bassHistory.push(bass)
+  if (bassHistory.length > 43) bassHistory.shift() // ~0.7 s at 60 fps
+  modState.audio.beat *= 0.9
+  if (bassHistory.length < 20) return
+  const mean = bassHistory.reduce((a, b) => a + b, 0) / bassHistory.length
+  const now = performance.now()
+  if (bass > 0.06 && bass > mean * 1.35 && now - lastBeatAt > 250) {
+    if (lastBeatAt) {
+      beatIntervals.push(now - lastBeatAt)
+      if (beatIntervals.length > 8) beatIntervals.shift()
+      const sorted = [...beatIntervals].sort((a, b) => a - b)
+      const median = sorted[Math.floor(sorted.length / 2)]
+      const bpm = Math.round(60000 / median)
+      modState.audio.bpm = bpm >= 40 && bpm <= 220 ? bpm : 0
+    }
+    lastBeatAt = now
+    modState.audio.beat = 1
+    fireBeatAction()
+  }
 }
 
 function updateAudio() {
@@ -145,6 +226,7 @@ function updateAudio() {
   modState.audio.mid = band(250, 2000)
   modState.audio.treble = band(2000, 8000)
   modState.audio.level = band(20, 8000)
+  detectBeat()
 }
 
 // --- MIDI (Web MIDI API) ------------------------------------------------

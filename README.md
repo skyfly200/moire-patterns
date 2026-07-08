@@ -30,6 +30,8 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Anti-aliasing controls** straight from the Reddit thread: point-sampled
   (aliased, maximum moiré), `fwidth()` smoothstep, and 4×/16× supersampling —
   so you can watch sampling moiré appear and disappear
+- **Performance options** — an FPS counter overlay and a render-resolution
+  scale (auto/100%/75%/50%) for smoother motion on slower GPUs
 - **Animation** — layers slowly counter-rotate and orbit (the "drift"
   animation, toggleable)
 - **Keyframe timeline** — every control has a ◆ button that keyframes it at
@@ -61,7 +63,9 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Live input modulation** — map real-time sources onto any numeric
   setting with per-mapping range and smoothing, applied every frame:
   - **Audio reactive**: microphone level plus bass / mid / treble bands
-    (Web Audio API)
+    (Web Audio API), **beat detection** with a live BPM readout, a
+    mappable beat-pulse source, and on-beat triggers (randomize the
+    pattern, shuffle colors, or advance the display slide every Nth beat)
   - **MIDI**: any CC from a connected controller, with click-and-twist
     MIDI learn (Web MIDI API — Chrome/Edge)
   - **Leap Motion**: palm X/Y/Z, pinch, grab, and palm roll via the
