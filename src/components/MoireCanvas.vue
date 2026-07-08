@@ -1,8 +1,8 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import * as THREE from 'three'
-import { vertexShader, fragmentShader } from '../shaders/moire.js'
-import { settings, MAX_LAYERS } from '../settings.js'
+import { vertexShader, makeFragmentShader } from '../shaders/moire.js'
+import { settings, shaderState, MAX_LAYERS } from '../settings.js'
 import { recState } from '../recorder.js'
 import { timeline, applyTimeline } from '../timeline.js'
 
@@ -21,9 +21,7 @@ function makeUniforms() {
     uResolution: { value: new THREE.Vector2(1, 1) },
     uAnimTime: { value: 0 },
     uZoom: { value: 1 },
-    uPatternType: { value: 0 },
     uLayerCount: { value: 2 },
-    uBlendMode: { value: 0 },
     uAAMode: { value: 0 },
     uColorMode: { value: 0 },
     uThickness: { value: 0.5 },
@@ -34,15 +32,15 @@ function makeUniforms() {
     uOffset: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
     uFreq: { value: new Array(MAX_LAYERS).fill(140) },
     uRot: { value: new Array(MAX_LAYERS).fill(0) },
+    uPattern: { value: new Array(MAX_LAYERS).fill(0) },
+    uOp: { value: new Array(MAX_LAYERS).fill(0) },
   }
 }
 
 function syncUniforms() {
   const u = material.uniforms
   u.uZoom.value = settings.zoom
-  u.uPatternType.value = settings.patternType
   u.uLayerCount.value = settings.layerCount
-  u.uBlendMode.value = settings.blendMode
   u.uAAMode.value = settings.aaMode
   u.uColorMode.value = settings.colorMode
   u.uThickness.value = settings.thickness
@@ -55,6 +53,8 @@ function syncUniforms() {
     u.uFreq.value[i] = l.freq
     u.uRot.value[i] = l.rot
     u.uLayerColor.value[i].set(l.color)
+    u.uPattern.value[i] = l.pattern
+    u.uOp.value[i] = l.op
   }
 }
 
@@ -193,16 +193,56 @@ function toggleRecording() {
 
 defineExpose({ exportPNG, captureThumb, toggleRecording })
 
+// Validate a rebuilt fragment shader before swapping it in, so a bad custom
+// expression reports an error instead of breaking rendering.
+function validateFragment(src) {
+  const gl = renderer.getContext()
+  const prefix =
+    '#version 300 es\n' +
+    'precision highp float;\n' +
+    'layout(location = 0) out highp vec4 pc_fragColor;\n' +
+    '#define gl_FragColor pc_fragColor\n'
+  const sh = gl.createShader(gl.FRAGMENT_SHADER)
+  gl.shaderSource(sh, prefix + src.replace('precision highp float;', ''))
+  gl.compileShader(sh)
+  const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS)
+  const log = ok ? '' : gl.getShaderInfoLog(sh)
+  gl.deleteShader(sh)
+  return { ok, log }
+}
+
+let exprTimer = null
+
+function rebuildShader() {
+  const src = makeFragmentShader(settings.customExpr || '0.0')
+  const { ok, log } = validateFragment(src)
+  if (!ok) {
+    shaderState.error = (log || 'shader compile error').trim().split('\n')[0]
+    return
+  }
+  shaderState.error = ''
+  material.fragmentShader = src
+  material.needsUpdate = true
+}
+
 onMounted(() => {
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: false })
   scene = new THREE.Scene()
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   material = new THREE.ShaderMaterial({
     vertexShader,
-    fragmentShader,
+    fragmentShader: makeFragmentShader(settings.customExpr),
     uniforms: makeUniforms(),
   })
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material))
+
+  watch(
+    () => settings.customExpr,
+    () => {
+      clearTimeout(exprTimer)
+      exprTimer = setTimeout(rebuildShader, 350)
+    },
+  )
 
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(container.value)
@@ -212,6 +252,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(exprTimer)
   if (recState.active) mediaRecorder?.stop()
   cancelAnimationFrame(rafId)
   resizeObserver?.disconnect()

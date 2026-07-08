@@ -5,6 +5,7 @@ import ControlPanel from './components/ControlPanel.vue'
 import TimelineBar from './components/TimelineBar.vue'
 import { settings, loadFromHash, randomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
+import { jumpToKey } from './timeline.js'
 
 const canvasRef = ref(null)
 const panelVisible = ref(true)
@@ -30,7 +31,9 @@ function onKey(e) {
     if (key === ' ' && e.target.closest('button')) return
     e.preventDefault()
     settings.animate = !settings.animate
-  } else if (key === 'arrowup' || key === 'arrowdown') {
+  } else if (key === ',') jumpToKey(-1)
+  else if (key === '.') jumpToKey(1)
+  else if (key === 'arrowup' || key === 'arrowdown') {
     e.preventDefault()
     const delta = key === 'arrowup' ? 0.1 : -0.1
     settings.animSpeed = +Math.min(4, Math.max(0.1, settings.animSpeed + delta)).toFixed(1)
