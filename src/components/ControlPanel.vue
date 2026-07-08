@@ -81,14 +81,14 @@ function setRotDeg(layer, deg) {
       <div class="row slideshow-row">
         <button
           class="slideshow-btn"
-          title="Start the slideshow, hiding the UI. Shortcut: S"
+          title="Start the display view, hiding the UI. Shortcut: S · exit with Esc"
           @click="$emit('slideshow')"
         >
-          ▶ Slideshow
+          ▶ Display
         </button>
         <select
           v-model="slideshow.mode"
-          title="Gallery: cycle saved patterns (or presets). Shuffle: jump to random settings. Morph: smoothly fade settings toward random targets."
+          title="Gallery: cycle saved patterns (or presets). Shuffle: jump to random settings. Morph: smoothly fade settings toward random targets. Shuffle + Morph: random pattern picks each cycle with smooth fades between."
         >
           <option v-for="m in SLIDESHOW_MODES" :key="m.value" :value="m.value">
             {{ m.label }}
