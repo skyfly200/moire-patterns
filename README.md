@@ -48,11 +48,24 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Presets + randomizer**, custom colors, and PNG export
 - **Save & share** — save favorites to a local gallery (with thumbnails) and
   copy a share link that encodes the full pattern state in the URL
+- **Slideshow mode** (`S`) — auto-rotates through your saved gallery (or the
+  built-in presets while the gallery is empty) with a configurable interval,
+  hiding the UI for a clean display
 - **Video capture** — record the canvas to a WebM video with one click
 - **Full-screen view** — hide the control panel (`H`) or go fullscreen (`F`)
 - **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
   resets), `↑`/`↓` animation speed, `,`/`.` jump to previous/next keyframe,
   `R` randomize, `H` hide UI, `F` fullscreen
+
+## ⚠️ Photosensitivity
+
+These patterns can flash and strobe, and may trigger seizures in people
+with photosensitive epilepsy — including people with no prior history.
+The app shows a seizure warning on first launch, **always starts with
+animation paused**, and never enables animation on its own (loading a
+share link or running the slideshow keeps your play/pause choice). We
+advise photosensitive users not to enable the animated or slideshow
+modes.
 
 ## Where the moiré comes from
 
