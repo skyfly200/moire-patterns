@@ -88,7 +88,7 @@ function setRotDeg(layer, deg) {
       </label>
       <label class="row">
         <span>Layers</span>
-        <input type="range" min="1" max="4" step="1" v-model.number="settings.layerCount" />
+        <input type="range" min="1" max="8" step="1" v-model.number="settings.layerCount" />
         <b>{{ settings.layerCount }}</b>
         <KeyBtn path="layerCount" />
       </label>

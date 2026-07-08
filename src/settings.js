@@ -1,8 +1,8 @@
 import { reactive } from 'vue'
 import { tlSnapshot, tlApply } from './timeline.js'
-import { DEFAULT_CUSTOM_EXPR } from './shaders/moire.js'
+import { DEFAULT_CUSTOM_EXPR, MAX_LAYERS } from './shaders/moire.js'
 
-export const MAX_LAYERS = 4
+export { MAX_LAYERS }
 
 export const PATTERN_TYPES = [
   { value: 0, label: 'Rings' },
@@ -43,7 +43,10 @@ export const COLOR_MODES = [
   { value: 3, label: 'Per-layer' },
 ]
 
-const LAYER_COLORS = ['#ff5c7a', '#5cc8ff', '#ffd166', '#9b5cff']
+const LAYER_COLORS = [
+  '#ff5c7a', '#5cc8ff', '#ffd166', '#9b5cff',
+  '#5cffb0', '#ff9e5c', '#5c7aff', '#ff5cf0',
+]
 
 function makeLayer(freq = 140, rot = 0, x = 0, y = 0, pattern = 0, op = 0) {
   return { freq, rot, x, y, pattern, op }
@@ -69,7 +72,11 @@ export function defaultSettings() {
       makeLayer(143, 0, 0.06, 0),
       makeLayer(150, 0.5, 0, 0.1),
       makeLayer(160, -0.5, 0, -0.1),
-    ].map((l, i) => ({ ...l, color: LAYER_COLORS[i] })),
+      makeLayer(170, 0.3, 0.1, 0),
+      makeLayer(180, -0.3, -0.1, 0),
+      makeLayer(190, 0.6, 0, -0.1),
+      makeLayer(200, -0.6, 0.05, 0.05),
+    ].slice(0, MAX_LAYERS).map((l, i) => ({ ...l, color: LAYER_COLORS[i] })),
   }
 }
 
@@ -224,7 +231,7 @@ export function loadFromHash() {
 export function randomize() {
   const rnd = (min, max) => min + Math.random() * (max - min)
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-  settings.layerCount = 2 + Math.floor(rnd(0, 3))
+  settings.layerCount = 2 + Math.floor(rnd(0, 4))
   settings.thickness = rnd(0.35, 0.65)
   const baseFreq = rnd(60, 400)
   const basePattern = pick([0, 1, 2, 3, 4, 5, 6, 7, 8])

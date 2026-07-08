@@ -11,7 +11,7 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Ten grating types** — rings, lines, grid, spokes, spiral, checker, hex,
   waves, dots, and a **custom GLSL expression** compiled live into the
   shader (with inline error feedback)
-- **Up to 4 layers**, each with its own pattern type, combine op, frequency,
+- **Up to 8 layers**, each with its own pattern type, combine op, frequency,
   rotation, and center offset
 - **Per-layer combine ops** — multiply, difference (XOR-like), average, min,
   max, screen, add, subtract, and **mask**: a mask layer's pattern blends
