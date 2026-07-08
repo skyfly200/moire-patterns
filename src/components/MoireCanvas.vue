@@ -214,7 +214,7 @@ function validateFragment(src) {
 let exprTimer = null
 
 function rebuildShader() {
-  const src = makeFragmentShader(settings.customExpr || '0.0')
+  const src = makeFragmentShader(settings.customExpr || '0.0', settings.customShapeExpr || '1.0')
   const { ok, log } = validateFragment(src)
   if (!ok) {
     shaderState.error = (log || 'shader compile error').trim().split('\n')[0]
@@ -231,13 +231,13 @@ onMounted(() => {
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   material = new THREE.ShaderMaterial({
     vertexShader,
-    fragmentShader: makeFragmentShader(settings.customExpr),
+    fragmentShader: makeFragmentShader(settings.customExpr, settings.customShapeExpr),
     uniforms: makeUniforms(),
   })
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material))
 
   watch(
-    () => settings.customExpr,
+    () => [settings.customExpr, settings.customShapeExpr],
     () => {
       clearTimeout(exprTimer)
       exprTimer = setTimeout(rebuildShader, 350)

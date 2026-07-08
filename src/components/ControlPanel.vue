@@ -4,7 +4,7 @@ import {
   settings,
   shaderState,
   PRESETS,
-  PATTERN_TYPES,
+  PATTERN_GROUPS,
   LAYER_OPS,
   AA_MODES,
   COLOR_MODES,
@@ -47,6 +47,10 @@ const recTime = computed(() => {
 
 const anyCustom = computed(() =>
   settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 9),
+)
+
+const anyCustomShape = computed(() =>
+  settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 15),
 )
 
 function rotDeg(layer) {
@@ -132,6 +136,7 @@ function setRotDeg(layer, deg) {
         <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
       </div>
       <div v-if="anyCustom" class="custom-box">
+        <span class="box-label">Custom pattern</span>
         <textarea
           v-model="settings.customExpr"
           rows="3" spellcheck="false"
@@ -141,8 +146,22 @@ function setRotDeg(layer, deg) {
           GLSL expression → float in [-1, 1]. Vars: <em>p</em> (vec2),
           <em>freq</em>, <em>d</em> = length(p), <em>a</em> = angle, <em>t</em> = time
         </p>
-        <p v-if="shaderState.error" class="err">{{ shaderState.error }}</p>
       </div>
+      <div v-if="anyCustomShape" class="custom-box">
+        <span class="box-label">Custom shape</span>
+        <textarea
+          v-model="settings.customShapeExpr"
+          rows="3" spellcheck="false"
+          placeholder="d - r * (0.7 + 0.3 * cos(a * 5.0))"
+        />
+        <p class="note">
+          Signed distance → negative inside the shape. Vars: <em>p</em>,
+          <em>r</em> = size from frequency, <em>freq</em>, <em>d</em>, <em>a</em>, <em>t</em>
+        </p>
+      </div>
+      <p v-if="(anyCustom || anyCustomShape) && shaderState.error" class="err">
+        {{ shaderState.error }}
+      </p>
     </section>
 
     <section>
@@ -184,9 +203,11 @@ function setRotDeg(layer, deg) {
       <label class="row">
         <span>Type</span>
         <select v-model.number="settings.layers[i - 1].pattern">
-          <option v-for="t in PATTERN_TYPES" :key="t.value" :value="t.value">
-            {{ t.label }}
-          </option>
+          <optgroup v-for="g in PATTERN_GROUPS" :key="g.label" :label="g.label">
+            <option v-for="t in g.items" :key="t.value" :value="t.value">
+              {{ t.label }}
+            </option>
+          </optgroup>
         </select>
         <KeyBtn :path="`layers.${i - 1}.pattern`" />
       </label>
@@ -474,6 +495,13 @@ button.rec {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+.box-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8f86d8;
 }
 .custom-box textarea {
   width: 100%;

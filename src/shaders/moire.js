@@ -13,6 +13,9 @@
 
 export const DEFAULT_CUSTOM_EXPR = 'sin(d * freq + 3.0 * sin(a * 5.0))'
 
+// Custom shapes are signed-distance expressions: negative inside the shape.
+export const DEFAULT_SHAPE_EXPR = 'd - r * (0.7 + 0.3 * cos(a * 5.0))'
+
 export const MAX_LAYERS = 8
 
 export const vertexShader = /* glsl */ `
@@ -21,7 +24,10 @@ void main() {
 }
 `
 
-export function makeFragmentShader(customExpr = DEFAULT_CUSTOM_EXPR) {
+export function makeFragmentShader(
+  customExpr = DEFAULT_CUSTOM_EXPR,
+  customShapeExpr = DEFAULT_SHAPE_EXPR,
+) {
   return /* glsl */ `
 precision highp float;
 
@@ -43,7 +49,8 @@ uniform vec2  uOffset[MAX_LAYERS];
 uniform float uFreq[MAX_LAYERS];
 uniform float uRot[MAX_LAYERS];
 // 0 rings, 1 lines, 2 grid, 3 spokes, 4 spiral, 5 checker, 6 hex,
-// 7 waves, 8 dots, 9 custom expression
+// 7 waves, 8 dots, 9 custom expression; shapes (SDF fills): 10 circle,
+// 11 square, 12 triangle, 13 star, 14 hexagon, 15 custom SDF expression
 uniform int   uPattern[MAX_LAYERS];
 // 0 multiply, 1 difference, 2 average, 3 min, 4 max, 5 screen, 6 add,
 // 7 subtract, 8 mask (blends layers below against layers above)
@@ -55,7 +62,60 @@ vec2 toPlane(vec2 fragCoord) {
   return uv * uZoom;
 }
 
+float sdBox(vec2 p, float r) {
+  vec2 q = abs(p) - vec2(r);
+  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0);
+}
+
+float sdTriangle(vec2 p, float r) {
+  const float k = 1.7320508;
+  vec2 q = vec2(abs(p.x) - r, p.y + r / k);
+  if (q.x + k * q.y > 0.0) q = vec2(q.x - k * q.y, -k * q.x - q.y) / 2.0;
+  q.x -= clamp(q.x, -2.0 * r, 0.0);
+  return -length(q) * sign(q.y);
+}
+
+float sdStar5(vec2 p, float r) {
+  const vec2 k1 = vec2(0.809016994, -0.587785252);
+  const vec2 k2 = vec2(-k1.x, k1.y);
+  const float rf = 0.45;
+  p.x = abs(p.x);
+  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+  p.x = abs(p.x);
+  p.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+float sdHexagon(vec2 p, float r) {
+  const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+  vec2 q = abs(p);
+  q -= 2.0 * min(dot(k.xy, q), 0.0) * k.xy;
+  q -= vec2(clamp(q.x, -k.z * r, k.z * r), r);
+  return length(q) * sign(q.y);
+}
+
 float wave(vec2 p, float freq, int type) {
+  if (type >= 10) {
+    // Shape fills: frequency controls size (higher frequency = smaller).
+    float r = 60.0 / max(freq, 1.0);
+    float sd;
+    if      (type == 10) sd = length(p) - r;
+    else if (type == 11) sd = sdBox(p, r);
+    else if (type == 12) sd = sdTriangle(p, r);
+    else if (type == 13) sd = sdStar5(p, r);
+    else if (type == 14) sd = sdHexagon(p, r);
+    else {
+      // Custom SDF. Available: p (vec2), r (radius), freq, d, a, t
+      float d = length(p);
+      float a = atan(p.y, p.x);
+      float t = uAnimTime;
+      sd = float(${customShapeExpr});
+    }
+    return clamp(-sd * 8.0, -1.0, 1.0);
+  }
   if (type == 0) return sin(length(p) * freq);
   if (type == 1) return sin(p.x * freq);
   if (type == 2) return max(sin(p.x * freq), sin(p.y * freq));
@@ -114,20 +174,23 @@ float applyOp(float acc, float c, int op) {
   return clamp(acc - c, 0.0, 1.0);
 }
 
-// Layers combine top-down. A layer whose op is "mask" splits the stack:
-// the composite of the layers below it and the composite of the layers
-// above it are blended by the mask layer's own pattern.
+// Layers combine bottom-up. A layer whose op is "mask" closes the group
+// of layers accumulated so far and blends it against the group that
+// follows, using the mask layer's own pattern (or shape) as the blend
+// factor. Several masks chain: [A, mask1, B, mask2, C] gives
+// mix(mix(A, B, m1), C, m2).
 float composite(vec2 p) {
+  float result = 0.0;
   float acc = 0.0;
-  float accBelow = 0.0;
-  float maskVal = -1.0;
+  float pendingMask = -1.0;
   bool started = false;
   for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= uLayerCount) break;
     float c = layerValue(p, i);
-    if (uOp[i] == 8 && maskVal < 0.0) {
-      maskVal = c;
-      accBelow = started ? acc : 0.0;
+    if (uOp[i] == 8 && i > 0) {
+      float group = started ? acc : 0.0;
+      result = pendingMask >= 0.0 ? mix(result, group, pendingMask) : group;
+      pendingMask = c;
       started = false;
       continue;
     }
@@ -138,10 +201,11 @@ float composite(vec2 p) {
       acc = applyOp(acc, c, uOp[i]);
     }
   }
-  if (maskVal >= 0.0) {
-    return started ? mix(accBelow, acc, maskVal) : accBelow * maskVal;
+  if (pendingMask >= 0.0) {
+    // A trailing mask with no layers above it clips the result instead.
+    return started ? mix(result, acc, pendingMask) : result * pendingMask;
   }
-  return acc;
+  return started ? acc : result;
 }
 
 vec3 hsv2rgb(vec3 c) {

@@ -16,7 +16,14 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Per-layer combine ops** — multiply, difference (XOR-like), average, min,
   max, screen, add, subtract, and **mask**: a mask layer's pattern blends
   the composite of the layers below it against the layers above it, so
-  different patterns can be masked together
+  different patterns can be masked together; multiple masks chain into
+  multiple regions
+- **Shape masks** — SDF-based shape fills (circle, square, triangle, star,
+  hexagon, or a **custom signed-distance expression**) usable as any layer,
+  and most powerfully as masks: put a shape layer on Mask to show one
+  pattern inside the shape and another outside (see the *Circle window*
+  and *Star window* presets); shapes are positioned/rotated/sized with the
+  regular layer controls and can be dragged on the canvas
 - **Color modes** — duotone, three-stop gradient, rainbow (hue follows the
   pattern value — richest with the Average blend), and per-layer colors
   screen-composited over the background
