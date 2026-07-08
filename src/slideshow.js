@@ -22,9 +22,13 @@ function advance() {
   if (!list.length) return
   slideshow.index = slideshow.index % list.length
   const item = list[slideshow.index]
+  // Preserve the user's play/pause choice across slides: gallery snapshots
+  // carry their own animate flag, which is deliberately overridden so the
+  // slideshow never turns animation on by itself (photosensitivity risk).
+  const wasAnimating = settings.animate
   if (item.snap) loadFromGallery(item)
   else applyPreset(item)
-  settings.animate = true
+  settings.animate = wasAnimating
   slideshow.index++
 }
 

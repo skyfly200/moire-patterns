@@ -67,6 +67,8 @@ function onKey(e) {
 
 onMounted(() => {
   loadFromHash()
+  // Always start paused, even when a share link was saved mid-animation.
+  settings.animate = false
   window.addEventListener('keydown', onKey)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
@@ -96,21 +98,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </button>
     <div v-if="showWarning" class="warn-backdrop">
       <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
-        <h2 id="warn-title">⚠️ Photosensitivity warning</h2>
+        <h2 id="warn-title">⚠️ Seizure warning — photosensitive epilepsy</h2>
         <p>
-          This tool generates high-contrast moiré and interference patterns
-          that can <strong>flicker, strobe, or shift rapidly</strong>,
-          especially when animated. A small percentage of people may
-          experience seizures or discomfort when exposed to flashing lights
-          or patterns like these.
+          This tool produces high-contrast interference patterns that can
+          <strong>flash, strobe, and shift rapidly</strong>. Content like
+          this <strong>can trigger seizures</strong> in people with
+          photosensitive epilepsy — including people who have
+          <strong>never had a seizure before</strong>.
         </p>
         <p>
-          If you have photosensitive epilepsy or a history of seizures,
-          please be cautious — keep animation speeds low, avoid high-contrast
-          colors at high frequencies, and stop immediately if you feel dizzy,
-          disoriented, or unwell.
+          <strong>Animation is paused by default and we advise against
+          enabling it</strong> if you or anyone watching has epilepsy, a
+          history of seizures, or is unsure of their sensitivity. The
+          animated and slideshow modes substantially increase the risk.
         </p>
-        <button class="warn-ok" @click="acknowledgeWarning">I understand</button>
+        <p>
+          Stop using this tool immediately and seek medical advice if you
+          experience dizziness, altered vision, eye or muscle twitching,
+          disorientation, or any involuntary movement.
+        </p>
+        <button class="warn-ok" @click="acknowledgeWarning">
+          I understand the risk
+        </button>
       </div>
     </div>
   </div>

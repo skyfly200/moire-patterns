@@ -57,6 +57,16 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   resets), `↑`/`↓` animation speed, `,`/`.` jump to previous/next keyframe,
   `R` randomize, `H` hide UI, `F` fullscreen
 
+## ⚠️ Photosensitivity
+
+These patterns can flash and strobe, and may trigger seizures in people
+with photosensitive epilepsy — including people with no prior history.
+The app shows a seizure warning on first launch, **always starts with
+animation paused**, and never enables animation on its own (loading a
+share link or running the slideshow keeps your play/pause choice). We
+advise photosensitive users not to enable the animated or slideshow
+modes.
+
 ## Where the moiré comes from
 
 Two flavors are on display:
