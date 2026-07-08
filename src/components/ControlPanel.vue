@@ -2,9 +2,10 @@
 import { ref, computed } from 'vue'
 import {
   settings,
+  shaderState,
   PRESETS,
   PATTERN_TYPES,
-  BLEND_MODES,
+  LAYER_OPS,
   AA_MODES,
   COLOR_MODES,
   applyPreset,
@@ -44,6 +45,10 @@ const recTime = computed(() => {
   return `${m}:${s}`
 })
 
+const anyCustom = computed(() =>
+  settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 9),
+)
+
 function rotDeg(layer) {
   return Math.round((layer.rot * 180) / Math.PI)
 }
@@ -72,24 +77,6 @@ function setRotDeg(layer, deg) {
 
     <section>
       <h2>Pattern</h2>
-      <label class="row">
-        <span>Type</span>
-        <select v-model.number="settings.patternType">
-          <option v-for="t in PATTERN_TYPES" :key="t.value" :value="t.value">
-            {{ t.label }}
-          </option>
-        </select>
-        <KeyBtn path="patternType" />
-      </label>
-      <label class="row">
-        <span>Blend</span>
-        <select v-model.number="settings.blendMode">
-          <option v-for="b in BLEND_MODES" :key="b.value" :value="b.value">
-            {{ b.label }}
-          </option>
-        </select>
-        <KeyBtn path="blendMode" />
-      </label>
       <label class="row">
         <span>Anti-alias</span>
         <select v-model.number="settings.aaMode">
@@ -144,6 +131,18 @@ function setRotDeg(layer, deg) {
         <em v-if="settings.colorMode === 2" class="note">hue follows pattern</em>
         <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
       </div>
+      <div v-if="anyCustom" class="custom-box">
+        <textarea
+          v-model="settings.customExpr"
+          rows="3" spellcheck="false"
+          placeholder="sin(d * freq + 3.0 * sin(a * 5.0))"
+        />
+        <p class="note">
+          GLSL expression → float in [-1, 1]. Vars: <em>p</em> (vec2),
+          <em>freq</em>, <em>d</em> = length(p), <em>a</em> = angle, <em>t</em> = time
+        </p>
+        <p v-if="shaderState.error" class="err">{{ shaderState.error }}</p>
+      </div>
     </section>
 
     <section>
@@ -182,6 +181,24 @@ function setRotDeg(layer, deg) {
         </template>
         <span v-if="settings.activeLayer === i - 1" class="tag">drag target</span>
       </h2>
+      <label class="row">
+        <span>Type</span>
+        <select v-model.number="settings.layers[i - 1].pattern">
+          <option v-for="t in PATTERN_TYPES" :key="t.value" :value="t.value">
+            {{ t.label }}
+          </option>
+        </select>
+        <KeyBtn :path="`layers.${i - 1}.pattern`" />
+      </label>
+      <label v-if="i > 1" class="row" title="How this layer combines with the layers below it. Mask blends the layers below against the layers above using this layer's pattern.">
+        <span>Combine</span>
+        <select v-model.number="settings.layers[i - 1].op">
+          <option v-for="o in LAYER_OPS" :key="o.value" :value="o.value">
+            {{ o.label }}
+          </option>
+        </select>
+        <KeyBtn :path="`layers.${i - 1}.op`" />
+      </label>
       <label class="row">
         <span>Frequency</span>
         <input type="range" min="5" max="1000" step="1" v-model.number="settings.layers[i - 1].freq" />
@@ -452,6 +469,36 @@ button.rec {
   font-size: 11px;
   font-style: normal;
   color: #75757f;
+}
+.custom-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.custom-box textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 7px 9px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #d7f0d7;
+  background: #14141a;
+  border: 1px solid #2c2c36;
+  border-radius: 7px;
+}
+.custom-box textarea:focus {
+  outline: none;
+  border-color: #4c42a3;
+}
+.custom-box .note em {
+  color: #a8a2d8;
+  font-style: normal;
+}
+.err {
+  font-size: 11px;
+  color: #ff8a8a;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 .layer-color {
   width: 26px !important;

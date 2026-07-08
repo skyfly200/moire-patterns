@@ -3,11 +3,15 @@
 // Inspired by the classic `sin(length(uv) * frequency)` fragment shader:
 // when the ring frequency approaches/exceeds the pixel Nyquist limit, the
 // point-sampled sine aliases against the pixel grid and moiré appears.
-// Layering several gratings (rings / lines / grids / spokes) with slightly
-// different frequencies, rotations or centers produces the classic
-// interference moiré as well. uAAMode exposes the mitigation techniques
-// (screen-space derivative smoothing, supersampling) discussed alongside
-// that shader, so aliasing moiré can be dialed up or down on demand.
+// Layering several gratings with slightly different frequencies, rotations
+// or centers produces the classic interference moiré as well. uAAMode
+// exposes the mitigation techniques (screen-space derivative smoothing,
+// supersampling), so aliasing moiré can be dialed up or down on demand.
+//
+// The fragment shader is a template: the user's custom pattern expression
+// is injected into wave() and the material is rebuilt on change.
+
+export const DEFAULT_CUSTOM_EXPR = 'sin(d * freq + 3.0 * sin(a * 5.0))'
 
 export const vertexShader = /* glsl */ `
 void main() {
@@ -15,7 +19,8 @@ void main() {
 }
 `
 
-export const fragmentShader = /* glsl */ `
+export function makeFragmentShader(customExpr = DEFAULT_CUSTOM_EXPR) {
+  return /* glsl */ `
 precision highp float;
 
 const int MAX_LAYERS = 4;
@@ -24,10 +29,7 @@ const float PI = 3.141592653589793;
 uniform vec2  uResolution;
 uniform float uAnimTime;    // seconds accumulated only while playing
 uniform float uZoom;
-uniform int   uPatternType; // 0 rings, 1 lines, 2 grid, 3 spokes
 uniform int   uLayerCount;  // 1..MAX_LAYERS
-uniform int   uBlendMode;   // 0 multiply, 1 difference, 2 average, 3 min,
-                            // 4 max, 5 screen, 6 add, 7 subtract
 uniform int   uAAMode;      // 0 off (aliased), 1 fwidth smooth, 2 ssaa 2x2, 3 ssaa 4x4
 uniform int   uColorMode;   // 0 duotone, 1 gradient, 2 rainbow, 3 per-layer
 uniform float uThickness;   // stripe duty threshold in [0,1]
@@ -38,6 +40,12 @@ uniform vec3  uLayerColor[MAX_LAYERS];
 uniform vec2  uOffset[MAX_LAYERS];
 uniform float uFreq[MAX_LAYERS];
 uniform float uRot[MAX_LAYERS];
+// 0 rings, 1 lines, 2 grid, 3 spokes, 4 spiral, 5 checker, 6 hex,
+// 7 waves, 8 dots, 9 custom expression
+uniform int   uPattern[MAX_LAYERS];
+// 0 multiply, 1 difference, 2 average, 3 min, 4 max, 5 screen, 6 add,
+// 7 subtract, 8 mask (blends layers below against layers above)
+uniform int   uOp[MAX_LAYERS];
 
 vec2 toPlane(vec2 fragCoord) {
   vec2 uv = fragCoord / uResolution * 2.0 - 1.0;
@@ -45,12 +53,28 @@ vec2 toPlane(vec2 fragCoord) {
   return uv * uZoom;
 }
 
-float wave(vec2 p, float freq) {
-  if (uPatternType == 0) return sin(length(p) * freq);
-  if (uPatternType == 1) return sin(p.x * freq);
-  if (uPatternType == 2) return max(sin(p.x * freq), sin(p.y * freq));
-  float spokes = max(floor(freq * 0.25), 1.0);
-  return sin(atan(p.y, p.x) * spokes);
+float wave(vec2 p, float freq, int type) {
+  if (type == 0) return sin(length(p) * freq);
+  if (type == 1) return sin(p.x * freq);
+  if (type == 2) return max(sin(p.x * freq), sin(p.y * freq));
+  if (type == 3) {
+    float spokes = max(floor(freq * 0.25), 1.0);
+    return sin(atan(p.y, p.x) * spokes);
+  }
+  if (type == 4) return sin(length(p) * freq + atan(p.y, p.x) * 3.0);
+  if (type == 5) return sin(p.x * freq) * sin(p.y * freq);
+  if (type == 6) {
+    return clamp((cos(p.x * freq)
+                + cos((0.5 * p.x + 0.866 * p.y) * freq)
+                + cos((0.5 * p.x - 0.866 * p.y) * freq)) / 1.5, -1.0, 1.0);
+  }
+  if (type == 7) return sin(p.x * freq + 4.0 * sin(p.y * freq * 0.15));
+  if (type == 8) return (cos(p.x * freq) + cos(p.y * freq)) * 0.5;
+  // Custom user expression. Available: p (vec2), freq, d (radius), a (angle), t (time)
+  float d = length(p);
+  float a = atan(p.y, p.x);
+  float t = uAnimTime;
+  return clamp(float(${customExpr}), -1.0, 1.0);
 }
 
 float layerValue(vec2 p, int i) {
@@ -69,7 +93,7 @@ float layerValue(vec2 p, int i) {
   float s = sin(rot);
   vec2 q = mat2(c, -s, s, c) * (p - off);
 
-  float v = 0.5 + 0.5 * wave(q, uFreq[i]);
+  float v = 0.5 + 0.5 * wave(q, uFreq[i], uPattern[i]);
   if (uAAMode == 1) {
     float w = fwidth(v) + 1e-4;
     return smoothstep(uThickness - w, uThickness + w, v);
@@ -77,22 +101,44 @@ float layerValue(vec2 p, int i) {
   return step(uThickness, v);
 }
 
+float applyOp(float acc, float c, int op) {
+  if (op == 0) return acc * c;
+  if (op == 1) return abs(acc - c);
+  if (op == 2) return (acc + c) * 0.5;
+  if (op == 3) return min(acc, c);
+  if (op == 4) return max(acc, c);
+  if (op == 5) return acc + c - acc * c;
+  if (op == 6) return min(acc + c, 1.0);
+  return clamp(acc - c, 0.0, 1.0);
+}
+
+// Layers combine top-down. A layer whose op is "mask" splits the stack:
+// the composite of the layers below it and the composite of the layers
+// above it are blended by the mask layer's own pattern.
 float composite(vec2 p) {
-  float acc = layerValue(p, 0);
-  float sum = acc;
-  for (int i = 1; i < MAX_LAYERS; i++) {
+  float acc = 0.0;
+  float accBelow = 0.0;
+  float maskVal = -1.0;
+  bool started = false;
+  for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= uLayerCount) break;
     float c = layerValue(p, i);
-    if      (uBlendMode == 0) acc *= c;
-    else if (uBlendMode == 1) acc = abs(acc - c);
-    else if (uBlendMode == 2) sum += c;
-    else if (uBlendMode == 3) acc = min(acc, c);
-    else if (uBlendMode == 4) acc = max(acc, c);
-    else if (uBlendMode == 5) acc = acc + c - acc * c;
-    else if (uBlendMode == 6) acc = min(acc + c, 1.0);
-    else                      acc = clamp(acc - c, 0.0, 1.0);
+    if (uOp[i] == 8 && maskVal < 0.0) {
+      maskVal = c;
+      accBelow = started ? acc : 0.0;
+      started = false;
+      continue;
+    }
+    if (!started) {
+      acc = c;
+      started = true;
+    } else {
+      acc = applyOp(acc, c, uOp[i]);
+    }
   }
-  if (uBlendMode == 2) return sum / float(uLayerCount);
+  if (maskVal >= 0.0) {
+    return started ? mix(accBelow, acc, maskVal) : accBelow * maskVal;
+  }
   return acc;
 }
 
@@ -146,3 +192,4 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }
 `
+}

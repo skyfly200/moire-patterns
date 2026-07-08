@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { tlSnapshot, tlApply } from './timeline.js'
+import { DEFAULT_CUSTOM_EXPR } from './shaders/moire.js'
 
 export const MAX_LAYERS = 4
 
@@ -8,9 +9,15 @@ export const PATTERN_TYPES = [
   { value: 1, label: 'Lines' },
   { value: 2, label: 'Grid' },
   { value: 3, label: 'Spokes' },
+  { value: 4, label: 'Spiral' },
+  { value: 5, label: 'Checker' },
+  { value: 6, label: 'Hex' },
+  { value: 7, label: 'Waves' },
+  { value: 8, label: 'Dots' },
+  { value: 9, label: 'Custom' },
 ]
 
-export const BLEND_MODES = [
+export const LAYER_OPS = [
   { value: 0, label: 'Multiply' },
   { value: 1, label: 'Difference' },
   { value: 2, label: 'Average' },
@@ -19,13 +26,7 @@ export const BLEND_MODES = [
   { value: 5, label: 'Screen' },
   { value: 6, label: 'Add' },
   { value: 7, label: 'Subtract' },
-]
-
-export const COLOR_MODES = [
-  { value: 0, label: 'Duotone' },
-  { value: 1, label: 'Gradient' },
-  { value: 2, label: 'Rainbow' },
-  { value: 3, label: 'Per-layer' },
+  { value: 8, label: 'Mask' },
 ]
 
 export const AA_MODES = [
@@ -35,16 +36,21 @@ export const AA_MODES = [
   { value: 3, label: 'Supersample 16×' },
 ]
 
+export const COLOR_MODES = [
+  { value: 0, label: 'Duotone' },
+  { value: 1, label: 'Gradient' },
+  { value: 2, label: 'Rainbow' },
+  { value: 3, label: 'Per-layer' },
+]
+
 const LAYER_COLORS = ['#ff5c7a', '#5cc8ff', '#ffd166', '#9b5cff']
 
-function makeLayer(freq = 140, rot = 0, x = 0, y = 0) {
-  return { freq, rot, x, y }
+function makeLayer(freq = 140, rot = 0, x = 0, y = 0, pattern = 0, op = 0) {
+  return { freq, rot, x, y, pattern, op }
 }
 
 export function defaultSettings() {
   return {
-    patternType: 0,
-    blendMode: 0,
     aaMode: 0,
     layerCount: 2,
     zoom: 1,
@@ -56,6 +62,7 @@ export function defaultSettings() {
     colorA: '#0b0b0f',
     colorB: '#f5f5f0',
     colorC: '#ff4d6d',
+    customExpr: DEFAULT_CUSTOM_EXPR,
     activeLayer: 0,
     layers: [
       makeLayer(140, 0, -0.06, 0),
@@ -68,44 +75,68 @@ export function defaultSettings() {
 
 export const settings = reactive(defaultSettings())
 
+// Compiled-shader status for the custom expression (written by MoireCanvas,
+// read by the control panel).
+export const shaderState = reactive({ error: '' })
+
 export const PRESETS = [
   {
     name: 'Classic rings',
     apply: {
-      patternType: 0, blendMode: 0, aaMode: 0, layerCount: 2,
-      zoom: 1, thickness: 0.5,
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.5,
       layers: [makeLayer(140, 0, -0.06, 0), makeLayer(143, 0, 0.06, 0)],
     },
   },
   {
     name: 'Rotated lines',
     apply: {
-      patternType: 1, blendMode: 1, aaMode: 0, layerCount: 2,
-      zoom: 1, thickness: 0.5,
-      layers: [makeLayer(180, 0, 0, 0), makeLayer(180, 0.07, 0, 0)],
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.5,
+      layers: [makeLayer(180, 0, 0, 0, 1), makeLayer(180, 0.07, 0, 0, 1, 1)],
     },
   },
   {
     name: 'Grid interference',
     apply: {
-      patternType: 2, blendMode: 0, aaMode: 0, layerCount: 2,
-      zoom: 1, thickness: 0.55,
-      layers: [makeLayer(120, 0, 0, 0), makeLayer(121, 0.035, 0, 0)],
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.55,
+      layers: [makeLayer(120, 0, 0, 0, 2), makeLayer(121, 0.035, 0, 0, 2)],
     },
   },
   {
     name: 'Radial spokes',
     apply: {
-      patternType: 3, blendMode: 1, aaMode: 0, layerCount: 2,
-      zoom: 1, thickness: 0.5,
-      layers: [makeLayer(240, 0, -0.03, 0), makeLayer(240, 0.02, 0.03, 0)],
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.5,
+      layers: [makeLayer(240, 0, -0.03, 0, 3), makeLayer(240, 0.02, 0.03, 0, 3, 1)],
+    },
+  },
+  {
+    name: 'Spiral beat',
+    apply: {
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.5,
+      layers: [makeLayer(150, 0, -0.04, 0, 4), makeLayer(153, 0, 0.04, 0, 4, 1)],
+    },
+  },
+  {
+    name: 'Masked mix',
+    apply: {
+      aaMode: 0, layerCount: 3, zoom: 1, thickness: 0.5,
+      layers: [
+        makeLayer(200, 0, 0, 0, 1),        // lines below the mask
+        makeLayer(30, 0, 0, 0, 0, 8),      // low-frequency rings as the mask
+        makeLayer(260, 0.02, 0, 0, 3),     // spokes above the mask
+      ],
+    },
+  },
+  {
+    name: 'Hex weave',
+    apply: {
+      aaMode: 0, layerCount: 2, zoom: 1, thickness: 0.55,
+      layers: [makeLayer(110, 0, 0, 0, 6), makeLayer(112, 0.03, 0, 0, 6)],
     },
   },
   {
     name: 'Aliasing demo',
     apply: {
-      patternType: 0, blendMode: 0, aaMode: 0, layerCount: 1,
-      zoom: 1, thickness: 0.5,
+      aaMode: 0, layerCount: 1, zoom: 1, thickness: 0.5,
       layers: [makeLayer(800, 0, 0, 0)],
     },
   },
@@ -113,8 +144,6 @@ export const PRESETS = [
 
 export function applyPreset(preset) {
   const a = preset.apply
-  settings.patternType = a.patternType
-  settings.blendMode = a.blendMode
   settings.aaMode = a.aaMode
   settings.layerCount = a.layerCount
   settings.zoom = a.zoom
@@ -124,18 +153,20 @@ export function applyPreset(preset) {
 }
 
 const SNAP_KEYS = [
-  'patternType', 'blendMode', 'aaMode', 'layerCount', 'zoom',
-  'thickness', 'animate', 'animSpeed', 'drift', 'colorMode', 'colorA', 'colorB', 'colorC',
+  'aaMode', 'layerCount', 'zoom', 'thickness', 'animate', 'animSpeed',
+  'drift', 'colorMode', 'colorA', 'colorB', 'colorC', 'customExpr',
 ]
 
 export function snapshot() {
-  const s = { v: 1 }
+  const s = { v: 2 }
   for (const k of SNAP_KEYS) s[k] = settings[k]
   s.layers = settings.layers.map((l) => ({
     freq: +l.freq.toFixed(2),
     rot: +l.rot.toFixed(4),
     x: +l.x.toFixed(4),
     y: +l.y.toFixed(4),
+    pattern: l.pattern,
+    op: l.op,
     color: l.color,
   }))
   s.tl = tlSnapshot()
@@ -148,6 +179,14 @@ export function applySnapshot(s) {
     s.layers.forEach((l, i) => {
       if (settings.layers[i]) Object.assign(settings.layers[i], l)
     })
+  }
+  // v1 snapshots had a single global pattern type and blend mode; the old
+  // blend values map 1:1 onto per-layer op values.
+  if (s.patternType !== undefined) {
+    settings.layers.forEach((l) => (l.pattern = s.patternType))
+  }
+  if (s.blendMode !== undefined && s.layers?.[0]?.op === undefined) {
+    settings.layers.forEach((l) => (l.op = s.blendMode))
   }
   settings.activeLayer = 0
   tlApply(s.tl)
@@ -184,15 +223,24 @@ export function loadFromHash() {
 
 export function randomize() {
   const rnd = (min, max) => min + Math.random() * (max - min)
-  settings.patternType = Math.floor(rnd(0, 4))
-  settings.blendMode = Math.floor(rnd(0, 4))
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
   settings.layerCount = 2 + Math.floor(rnd(0, 3))
   settings.thickness = rnd(0.35, 0.65)
   const baseFreq = rnd(60, 400)
+  const basePattern = pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
   settings.layers.forEach((l, i) => {
     l.freq = baseFreq * rnd(0.97, 1.03)
     l.rot = rnd(-0.15, 0.15) * i
     l.x = rnd(-0.15, 0.15)
     l.y = rnd(-0.15, 0.15)
+    // Mostly keep layers on one pattern family (classic moiré), sometimes mix.
+    l.pattern = Math.random() < 0.75 ? basePattern : pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    l.op = pick([0, 0, 1, 1, 3, 4, 5])
   })
+  // Occasionally drop a low-frequency mask into the middle of the stack.
+  if (settings.layerCount >= 3 && Math.random() < 0.35) {
+    const m = settings.layers[1]
+    m.op = 8
+    m.freq = rnd(15, 60)
+  }
 }

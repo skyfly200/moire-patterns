@@ -9,6 +9,7 @@ import {
   trackLabel,
   evalTrack,
   isColorPath,
+  jumpToKey,
 } from '../timeline.js'
 
 const collapsed = ref(false)
@@ -58,8 +59,11 @@ function scrubEnd() {
 let drag = null // { tr, k }
 
 function keyDown(e, tr, k) {
+  if (e.button !== 0) return
   drag = { tr, k }
   e.currentTarget.setPointerCapture(e.pointerId)
+  timeline.time = k.t
+  applyTimeline(k.t)
 }
 
 function keyMove(e, tr, k) {
@@ -67,6 +71,7 @@ function keyMove(e, tr, k) {
   const lane = e.currentTarget.closest('.lane')
   k.t = timeFromEvent(e, lane)
   tr.keys.sort((a, b) => a.t - b.t)
+  timeline.time = k.t
   if (!settings.animate) applyTimeline(timeline.time)
 }
 
@@ -121,10 +126,14 @@ function gradientStyle(tr) {
 <template>
   <div class="tbar">
     <div class="toolbar">
+      <button class="jump" title="Jump to previous keyframe (,)" :disabled="!timeline.tracks.length"
+        @click="jumpToKey(-1)">|◀</button>
       <button class="play" :title="settings.animate ? 'Pause (space)' : 'Play (space)'"
         @click="settings.animate = !settings.animate">
         {{ settings.animate ? '❚❚' : '▶' }}
       </button>
+      <button class="jump" title="Jump to next keyframe (.)" :disabled="!timeline.tracks.length"
+        @click="jumpToKey(1)">▶|</button>
       <span class="clock">
         {{ timeline.time.toFixed(2) }}s
         <em>/</em>
@@ -138,7 +147,7 @@ function gradientStyle(tr) {
         keyframe any control with its ◆ button — tracks appear here
       </span>
       <span v-else class="tip">
-        drag ◆ to retime · double-click ◆ to delete · click a lane to scrub
+        drag ◆ to retime · right-click ◆ to delete · click a lane to scrub
       </span>
       <span class="spacer" />
       <button class="collapse" :title="collapsed ? 'Expand timeline' : 'Collapse timeline'"
@@ -185,12 +194,13 @@ function gradientStyle(tr) {
             class="kf"
             :class="{ on: Math.abs(k.t - timeline.time) < 0.051 }"
             :style="{ left: pct(k.t) }"
-            :title="`${k.t.toFixed(2)}s — drag to move, double-click to delete`"
+            :title="`${k.t.toFixed(2)}s — drag to move, right-click to delete`"
             @pointerdown.stop="keyDown($event, tr, k)"
             @pointermove="keyMove($event, tr, k)"
             @pointerup="keyUp"
             @pointercancel="keyUp"
             @dblclick="keyRemove(tr, k)"
+            @contextmenu.prevent="keyRemove(tr, k)"
           >◆</button>
           <div class="playhead" :style="{ left: pct(timeline.time) }" />
         </div>
@@ -217,6 +227,23 @@ function gradientStyle(tr) {
   top: 0;
   background: #101014;
   z-index: 2;
+}
+.jump {
+  padding: 3px 8px;
+  font-size: 10px;
+  color: #b6b6c0;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.jump:hover:not(:disabled) {
+  background: #23232c;
+  border-color: #3a3a48;
+}
+.jump:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .play {
   width: 30px;

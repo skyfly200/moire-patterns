@@ -16,7 +16,11 @@ const EASE = {
 }
 
 // Discrete params: stepped by default and rounded on apply.
-const INT_PATHS = new Set(['patternType', 'blendMode', 'aaMode', 'layerCount', 'colorMode'])
+const INT_GLOBALS = new Set(['patternType', 'blendMode', 'aaMode', 'layerCount', 'colorMode'])
+
+function isIntPath(path) {
+  return INT_GLOBALS.has(path) || /\.(pattern|op)$/.test(path)
+}
 
 const KEY_EPS = 0.051 // seconds — clicks this close to an existing key toggle it
 
@@ -60,7 +64,7 @@ export function toggleKeyAt(path, time) {
       return
     }
   } else {
-    tr = { path, easing: INT_PATHS.has(path) ? 'hold' : 'ease-in-out', keys: [] }
+    tr = { path, easing: isIntPath(path) ? 'hold' : 'ease-in-out', keys: [] }
     timeline.tracks.push(tr)
   }
   tr.keys.push({ t, v: getParam(path) })
@@ -94,7 +98,7 @@ export function evalTrack(tr, t) {
   const u = EASE[tr.easing]((t - a.t) / (b.t - a.t))
   if (isColorPath(tr.path)) return lerpColor(a.v, b.v, u)
   const v = a.v + (b.v - a.v) * u
-  return INT_PATHS.has(tr.path) ? Math.round(v) : v
+  return isIntPath(tr.path) ? Math.round(v) : v
 }
 
 export function applyTimeline(t) {
@@ -117,7 +121,31 @@ const GLOBAL_LABELS = {
   colorC: 'Color C',
 }
 
-const LAYER_LABELS = { freq: 'frequency', rot: 'rotation', x: 'offset X', y: 'offset Y', color: 'color' }
+const LAYER_LABELS = {
+  freq: 'frequency',
+  rot: 'rotation',
+  x: 'offset X',
+  y: 'offset Y',
+  color: 'color',
+  pattern: 'type',
+  op: 'combine',
+}
+
+// Jump the playhead to the nearest keyframe in the given direction
+// (dir = -1 previous, +1 next), wrapping around the key set.
+export function jumpToKey(dir) {
+  const times = [...new Set(timeline.tracks.flatMap((tr) => tr.keys.map((k) => k.t)))]
+    .sort((a, b) => a - b)
+  if (!times.length) return
+  let target
+  if (dir > 0) {
+    target = times.find((t) => t > timeline.time + 0.011) ?? times[0]
+  } else {
+    target = [...times].reverse().find((t) => t < timeline.time - 0.011) ?? times[times.length - 1]
+  }
+  timeline.time = target
+  applyTimeline(target)
+}
 
 export function trackLabel(path) {
   if (GLOBAL_LABELS[path]) return GLOBAL_LABELS[path]
