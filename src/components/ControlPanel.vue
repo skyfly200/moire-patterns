@@ -16,7 +16,7 @@ import {
 import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
 import { recState } from '../recorder.js'
 import KeyBtn from './KeyBtn.vue'
-import { slideshow } from '../slideshow.js'
+import { slideshow, SLIDESHOW_MODES } from '../slideshow.js'
 
 defineEmits(['export', 'record', 'save', 'slideshow'])
 
@@ -81,14 +81,24 @@ function setRotDeg(layer, deg) {
       <div class="row slideshow-row">
         <button
           class="slideshow-btn"
-          title="Cycle through your saved gallery (or these presets while the gallery is empty), hiding the UI. Shortcut: S"
+          title="Start the slideshow, hiding the UI. Shortcut: S"
           @click="$emit('slideshow')"
         >
           ▶ Slideshow
         </button>
-        <span>every</span>
+        <select
+          v-model="slideshow.mode"
+          title="Gallery: cycle saved patterns (or presets). Shuffle: jump to random settings. Morph: smoothly fade settings toward random targets."
+        >
+          <option v-for="m in SLIDESHOW_MODES" :key="m.value" :value="m.value">
+            {{ m.label }}
+          </option>
+        </select>
+      </div>
+      <div class="row slideshow-row">
+        <span class="every">every</span>
         <input type="number" min="2" max="60" step="1" v-model.number="slideshow.interval" />
-        <span>s</span>
+        <span>seconds</span>
       </div>
     </section>
 
@@ -399,6 +409,13 @@ input[type='checkbox'] {
 }
 .slideshow-row .slideshow-btn {
   flex: 1;
+}
+.slideshow-row select {
+  flex: 1;
+}
+.slideshow-row .every {
+  width: 74px;
+  flex: none;
 }
 .slideshow-row input {
   width: 46px;

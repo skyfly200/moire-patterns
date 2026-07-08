@@ -48,9 +48,11 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
 - **Presets + randomizer**, custom colors, and PNG export
 - **Save & share** — save favorites to a local gallery (with thumbnails) and
   copy a share link that encodes the full pattern state in the URL
-- **Slideshow mode** (`S`) — auto-rotates through your saved gallery (or the
-  built-in presets while the gallery is empty) with a configurable interval,
-  hiding the UI for a clean display
+- **Slideshow modes** (`S`) — hide the UI and auto-play: **Gallery** rotates
+  through your saved gallery (or the built-in presets while the gallery is
+  empty), **Shuffle** jumps to fully random settings every interval, and
+  **Morph** smoothly eases frequencies, rotations, offsets, zoom, line
+  width, and colors toward new random targets for a continuous fade
 - **Video capture** — record the canvas to a WebM video with one click
 - **Full-screen view** — hide the control panel (`H`) or go fullscreen (`F`)
 - **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
