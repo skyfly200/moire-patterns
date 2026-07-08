@@ -15,7 +15,6 @@ import {
 import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
 import { recState } from '../recorder.js'
 import KeyBtn from './KeyBtn.vue'
-import TimelineSection from './TimelineSection.vue'
 
 defineEmits(['export', 'record', 'save'])
 
@@ -164,8 +163,6 @@ function setRotDeg(layer, deg) {
         <KeyBtn path="animSpeed" />
       </label>
     </section>
-
-    <TimelineSection />
 
     <section v-for="i in settings.layerCount" :key="i">
       <h2 class="layer-head">

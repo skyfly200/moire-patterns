@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import MoireCanvas from './components/MoireCanvas.vue'
 import ControlPanel from './components/ControlPanel.vue'
+import TimelineBar from './components/TimelineBar.vue'
 import { settings, loadFromHash, randomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 
@@ -45,13 +46,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <div class="app">
-    <ControlPanel
-      v-show="panelVisible"
-      @export="canvasRef?.exportPNG()"
-      @record="canvasRef?.toggleRecording()"
-      @save="saveCurrent"
-    />
-    <MoireCanvas ref="canvasRef" />
+    <div class="main">
+      <ControlPanel
+        v-show="panelVisible"
+        @export="canvasRef?.exportPNG()"
+        @record="canvasRef?.toggleRecording()"
+        @save="saveCurrent"
+      />
+      <MoireCanvas ref="canvasRef" />
+    </div>
+    <TimelineBar v-show="panelVisible" />
     <div class="view-buttons">
       <button @click="panelVisible = !panelVisible">
         {{ panelVisible ? 'Hide UI' : 'Show UI' }}
@@ -64,8 +68,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 <style scoped>
 .app {
   display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+}
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 .view-buttons {
   position: fixed;

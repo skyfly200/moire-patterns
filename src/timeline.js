@@ -36,7 +36,7 @@ export function setParam(path, v) {
   o[parts[parts.length - 1]] = v
 }
 
-function isColorPath(path) {
+export function isColorPath(path) {
   return path.includes('color')
 }
 
@@ -83,7 +83,7 @@ function lerpColor(a, b, u) {
   return out
 }
 
-function evalTrack(tr, t) {
+export function evalTrack(tr, t) {
   const keys = tr.keys
   if (t <= keys[0].t) return keys[0].v
   if (t >= keys[keys.length - 1].t) return keys[keys.length - 1].v
