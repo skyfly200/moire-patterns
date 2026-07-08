@@ -1,20 +1,36 @@
 import { reactive } from 'vue'
 import { tlSnapshot, tlApply } from './timeline.js'
-import { DEFAULT_CUSTOM_EXPR, MAX_LAYERS } from './shaders/moire.js'
+import { DEFAULT_CUSTOM_EXPR, DEFAULT_SHAPE_EXPR, MAX_LAYERS } from './shaders/moire.js'
 
 export { MAX_LAYERS }
 
-export const PATTERN_TYPES = [
-  { value: 0, label: 'Rings' },
-  { value: 1, label: 'Lines' },
-  { value: 2, label: 'Grid' },
-  { value: 3, label: 'Spokes' },
-  { value: 4, label: 'Spiral' },
-  { value: 5, label: 'Checker' },
-  { value: 6, label: 'Hex' },
-  { value: 7, label: 'Waves' },
-  { value: 8, label: 'Dots' },
-  { value: 9, label: 'Custom' },
+export const PATTERN_GROUPS = [
+  {
+    label: 'Patterns',
+    items: [
+      { value: 0, label: 'Rings' },
+      { value: 1, label: 'Lines' },
+      { value: 2, label: 'Grid' },
+      { value: 3, label: 'Spokes' },
+      { value: 4, label: 'Spiral' },
+      { value: 5, label: 'Checker' },
+      { value: 6, label: 'Hex' },
+      { value: 7, label: 'Waves' },
+      { value: 8, label: 'Dots' },
+      { value: 9, label: 'Custom pattern' },
+    ],
+  },
+  {
+    label: 'Shapes (great as masks)',
+    items: [
+      { value: 10, label: 'Circle' },
+      { value: 11, label: 'Square' },
+      { value: 12, label: 'Triangle' },
+      { value: 13, label: 'Star' },
+      { value: 14, label: 'Hexagon' },
+      { value: 15, label: 'Custom shape (SDF)' },
+    ],
+  },
 ]
 
 export const LAYER_OPS = [
@@ -66,6 +82,7 @@ export function defaultSettings() {
     colorB: '#f5f5f0',
     colorC: '#ff4d6d',
     customExpr: DEFAULT_CUSTOM_EXPR,
+    customShapeExpr: DEFAULT_SHAPE_EXPR,
     activeLayer: 0,
     layers: [
       makeLayer(140, 0, -0.06, 0),
@@ -141,6 +158,28 @@ export const PRESETS = [
     },
   },
   {
+    name: 'Circle window',
+    apply: {
+      aaMode: 0, layerCount: 3, zoom: 1, thickness: 0.5,
+      layers: [
+        makeLayer(140, 0, -0.04, 0),          // rings outside the circle
+        makeLayer(75, 0, 0, 0, 10, 8),        // circle shape as the mask
+        makeLayer(200, 0.06, 0, 0, 1, 1),     // lines inside the circle
+      ],
+    },
+  },
+  {
+    name: 'Star window',
+    apply: {
+      aaMode: 0, layerCount: 3, zoom: 1, thickness: 0.5,
+      layers: [
+        makeLayer(120, 0, 0, 0, 2),           // grid outside the star
+        makeLayer(55, 0, 0, 0, 13, 8),        // star shape as the mask
+        makeLayer(150, 0, 0, 0, 4),           // spiral inside the star
+      ],
+    },
+  },
+  {
     name: 'Aliasing demo',
     apply: {
       aaMode: 0, layerCount: 1, zoom: 1, thickness: 0.5,
@@ -162,6 +201,7 @@ export function applyPreset(preset) {
 const SNAP_KEYS = [
   'aaMode', 'layerCount', 'zoom', 'thickness', 'animate', 'animSpeed',
   'drift', 'colorMode', 'colorA', 'colorB', 'colorC', 'customExpr',
+  'customShapeExpr',
 ]
 
 export function snapshot() {
@@ -244,10 +284,18 @@ export function randomize() {
     l.pattern = Math.random() < 0.75 ? basePattern : pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
     l.op = pick([0, 0, 1, 1, 3, 4, 5])
   })
-  // Occasionally drop a low-frequency mask into the middle of the stack.
-  if (settings.layerCount >= 3 && Math.random() < 0.35) {
+  // Occasionally drop a mask into the middle of the stack — sometimes a
+  // low-frequency grating, sometimes a shape window.
+  if (settings.layerCount >= 3 && Math.random() < 0.4) {
     const m = settings.layers[1]
     m.op = 8
-    m.freq = rnd(15, 60)
+    if (Math.random() < 0.5) {
+      m.pattern = pick([10, 11, 12, 13, 14])
+      m.freq = rnd(45, 90)
+      m.x = rnd(-0.3, 0.3)
+      m.y = rnd(-0.3, 0.3)
+    } else {
+      m.freq = rnd(15, 60)
+    }
   }
 }
