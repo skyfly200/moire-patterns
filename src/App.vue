@@ -48,7 +48,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="app">
+  <div class="app" :class="{ clean: !panelVisible }">
     <div class="main">
       <ControlPanel
         v-show="panelVisible"
@@ -86,6 +86,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   right: 12px;
   display: flex;
   gap: 6px;
+  transition: opacity 0.25s;
+}
+
+/* Clean display mode: with the UI hidden, the remaining overlays are
+   invisible until hovered. */
+.app.clean .view-buttons {
+  opacity: 0;
+  padding: 10px 12px;
+  margin: -10px -12px;
+}
+.app.clean .view-buttons:hover,
+.app.clean .view-buttons:focus-within {
+  opacity: 1;
+}
+.app.clean :deep(.hint) {
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.25s;
+}
+.app.clean :deep(.hint:hover) {
+  opacity: 1;
 }
 .view-buttons button {
   padding: 5px 12px;
