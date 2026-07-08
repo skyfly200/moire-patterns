@@ -25,6 +25,11 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   curves (linear, ease-in, ease-out, ease-in-out, hold), colors blend
   smoothly, discrete options step, and the whole timeline loops, records to
   video, and travels inside share links and gallery saves
+- **Blender-style timeline bar** — a dock under the canvas with a time
+  ruler, scrubbable playhead, adjustable timeline length, and one lane per
+  track: numeric tracks draw their interpolation curve, color tracks show a
+  gradient strip, and keyframes are draggable diamonds (double-click to
+  delete)
 - **Direct manipulation** — drag on the canvas to move the active layer's
   center, scroll to zoom
 - **Presets + randomizer**, custom colors, and PNG export
