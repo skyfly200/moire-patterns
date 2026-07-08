@@ -13,6 +13,8 @@
 
 export const DEFAULT_CUSTOM_EXPR = 'sin(d * freq + 3.0 * sin(a * 5.0))'
 
+export const MAX_LAYERS = 8
+
 export const vertexShader = /* glsl */ `
 void main() {
   gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -23,7 +25,7 @@ export function makeFragmentShader(customExpr = DEFAULT_CUSTOM_EXPR) {
   return /* glsl */ `
 precision highp float;
 
-const int MAX_LAYERS = 4;
+const int MAX_LAYERS = ${MAX_LAYERS};
 const float PI = 3.141592653589793;
 
 uniform vec2  uResolution;
