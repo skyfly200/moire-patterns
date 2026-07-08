@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { tlSnapshot, tlApply } from './timeline.js'
+import { modSnapshot, modApply } from './modulation.js'
 import { DEFAULT_CUSTOM_EXPR, DEFAULT_SHAPE_EXPR, MAX_LAYERS } from './shaders/moire.js'
 
 export { MAX_LAYERS }
@@ -217,6 +218,7 @@ export function snapshot() {
     color: l.color,
   }))
   s.tl = tlSnapshot()
+  s.mods = modSnapshot()
   return s
 }
 
@@ -237,6 +239,7 @@ export function applySnapshot(s) {
   }
   settings.activeLayer = 0
   tlApply(s.tl)
+  modApply(s.mods)
 }
 
 export function encodeSnapshot(s = snapshot()) {

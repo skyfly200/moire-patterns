@@ -17,6 +17,21 @@ import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
 import { recState } from '../recorder.js'
 import KeyBtn from './KeyBtn.vue'
 import { slideshow, SLIDESHOW_MODES } from '../slideshow.js'
+import {
+  modState,
+  AUDIO_SOURCES,
+  LEAP_SOURCES,
+  MOD_TARGETS,
+  addMapping,
+  removeMapping,
+  resetMappingRange,
+  startAudio,
+  stopAudio,
+  startMIDI,
+  stopMIDI,
+  startLeap,
+  stopLeap,
+} from '../modulation.js'
 
 defineEmits(['export', 'record', 'save', 'slideshow'])
 
@@ -49,6 +64,23 @@ const recTime = computed(() => {
 const anyCustom = computed(() =>
   settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 9),
 )
+
+function toggleAudio(e) {
+  e.target.checked ? startAudio() : stopAudio()
+}
+function toggleMIDI(e) {
+  e.target.checked ? startMIDI() : stopMIDI()
+}
+function toggleLeap(e) {
+  e.target.checked ? startLeap() : stopLeap()
+}
+
+const knownCCs = computed(() => Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b))
+
+function sourceLabel(source) {
+  if (source.startsWith('midi.cc')) return 'MIDI · CC ' + source.slice(7)
+  return source
+}
 
 const anyCustomShape = computed(() =>
   settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 15),
@@ -203,6 +235,83 @@ function setRotDeg(layer, deg) {
         <b>{{ settings.animSpeed.toFixed(1) }}×</b>
         <KeyBtn path="animSpeed" />
       </label>
+    </section>
+
+    <section>
+      <h2>Live Input</h2>
+      <label class="row">
+        <span>Audio (mic)</span>
+        <input type="checkbox" :checked="modState.audio.enabled" @change="toggleAudio" />
+        <span v-if="modState.audio.enabled" class="meter">
+          <span class="meter-fill" :style="{ width: modState.audio.level * 100 + '%' }" />
+        </span>
+      </label>
+      <p v-if="modState.audio.error" class="err">{{ modState.audio.error }}</p>
+      <label class="row">
+        <span>MIDI</span>
+        <input type="checkbox" :checked="modState.midi.enabled" @change="toggleMIDI" />
+        <em v-if="modState.midi.enabled" class="note">
+          {{ modState.midi.inputs }} device{{ modState.midi.inputs === 1 ? '' : 's' }}
+        </em>
+      </label>
+      <p v-if="modState.midi.error" class="err">{{ modState.midi.error }}</p>
+      <label class="row">
+        <span>Leap Motion</span>
+        <input type="checkbox" :checked="modState.leap.enabled" @change="toggleLeap" />
+        <em v-if="modState.leap.connected" class="note">
+          connected · {{ modState.leap.hands }} hand{{ modState.leap.hands === 1 ? '' : 's' }}
+        </em>
+      </label>
+      <p v-if="modState.leap.error" class="err">{{ modState.leap.error }}</p>
+
+      <div v-for="m in modState.mappings" :key="m.id" class="map-box">
+        <div class="row">
+          <select v-model="m.source" class="map-source">
+            <optgroup label="Audio">
+              <option v-for="s in AUDIO_SOURCES" :key="s.value" :value="s.value">
+                {{ s.label }}
+              </option>
+            </optgroup>
+            <optgroup label="MIDI">
+              <option v-if="m.source.startsWith('midi.cc')" :value="m.source">
+                {{ sourceLabel(m.source) }}
+              </option>
+              <option v-for="cc in knownCCs" :key="cc" :value="'midi.cc' + cc">
+                MIDI · CC {{ cc }}
+              </option>
+            </optgroup>
+            <optgroup label="Leap Motion">
+              <option v-for="s in LEAP_SOURCES" :key="s.value" :value="s.value">
+                {{ s.label }}
+              </option>
+            </optgroup>
+          </select>
+          <span class="arrow">→</span>
+          <select v-model="m.path" class="map-target" @change="resetMappingRange(m)">
+            <option v-for="t in MOD_TARGETS" :key="t.path" :value="t.path">
+              {{ t.label }}
+            </option>
+          </select>
+          <button class="map-del" title="Remove mapping" @click="removeMapping(m.id)">✕</button>
+        </div>
+        <div class="row map-nums">
+          <span>range</span>
+          <input type="number" step="any" v-model.number="m.min" />
+          <input type="number" step="any" v-model.number="m.max" />
+          <span>smooth</span>
+          <input type="range" min="0" max="0.95" step="0.05" v-model.number="m.smooth" />
+          <button
+            v-if="modState.midi.enabled"
+            class="learn"
+            :class="{ active: modState.learnId === m.id }"
+            title="Click, then move a knob/fader on your MIDI controller"
+            @click="modState.learnId = modState.learnId === m.id ? null : m.id"
+          >
+            {{ modState.learnId === m.id ? 'move a knob…' : 'learn' }}
+          </button>
+        </div>
+      </div>
+      <button class="wide" @click="addMapping()">+ Add mapping</button>
     </section>
 
     <section v-for="i in settings.layerCount" :key="i">
@@ -574,6 +683,89 @@ button.rec {
   font-size: 11px;
   color: #ff8a8a;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+.meter {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  overflow: hidden;
+}
+.meter-fill {
+  display: block;
+  height: 100%;
+  background: #7c6cf0;
+  transition: width 0.08s linear;
+}
+.map-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 8px;
+  background: #16161c;
+  border: 1px solid #24242d;
+  border-radius: 7px;
+}
+.map-box .row {
+  gap: 6px;
+}
+.map-source,
+.map-target {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px !important;
+  padding: 3px 4px;
+}
+.arrow {
+  flex: none;
+  color: #6f6f7a;
+  font-size: 11px;
+}
+.map-del {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #9a9aa5;
+  background: none;
+  border: 1px solid #2c2c36;
+  border-radius: 5px;
+}
+.map-del:hover {
+  color: #ff8a8a;
+  border-color: rgba(255, 92, 92, 0.5);
+}
+.map-nums {
+  font-size: 10.5px;
+  color: #75757f;
+}
+.map-nums > span {
+  flex: none;
+  width: auto;
+}
+.map-nums input[type='number'] {
+  width: 56px;
+  padding: 2px 5px;
+  font-size: 11px;
+  color: #e4e4e9;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.map-nums input[type='range'] {
+  flex: 1;
+  min-width: 30px;
+  accent-color: #7c6cf0;
+}
+.learn {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 10px;
+}
+.learn.active {
+  border-color: #ffd166;
+  color: #ffd166;
 }
 .layer-color {
   width: 26px !important;
