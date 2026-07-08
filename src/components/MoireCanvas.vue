@@ -72,7 +72,7 @@ function frame(now) {
   const dt = Math.min((now - lastFrame) / 1000, 0.1)
   lastFrame = now
   if (settings.animate) {
-    if (settings.drift) animTime += dt * settings.animSpeed * 0.5
+    if (settings.drift) animTime += dt * settings.animSpeed * 0.25
     if (timeline.tracks.length) {
       timeline.time = (timeline.time + dt) % timeline.duration
       applyTimeline(timeline.time)
