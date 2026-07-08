@@ -14,6 +14,8 @@ import {
 } from '../settings.js'
 import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
 import { recState } from '../recorder.js'
+import KeyBtn from './KeyBtn.vue'
+import TimelineSection from './TimelineSection.vue'
 
 defineEmits(['export', 'record', 'save'])
 
@@ -78,6 +80,7 @@ function setRotDeg(layer, deg) {
             {{ t.label }}
           </option>
         </select>
+        <KeyBtn path="patternType" />
       </label>
       <label class="row">
         <span>Blend</span>
@@ -86,6 +89,7 @@ function setRotDeg(layer, deg) {
             {{ b.label }}
           </option>
         </select>
+        <KeyBtn path="blendMode" />
       </label>
       <label class="row">
         <span>Anti-alias</span>
@@ -94,21 +98,25 @@ function setRotDeg(layer, deg) {
             {{ m.label }}
           </option>
         </select>
+        <KeyBtn path="aaMode" />
       </label>
       <label class="row">
         <span>Layers</span>
         <input type="range" min="1" max="4" step="1" v-model.number="settings.layerCount" />
         <b>{{ settings.layerCount }}</b>
+        <KeyBtn path="layerCount" />
       </label>
       <label class="row">
         <span>Zoom</span>
         <input type="range" min="0.25" max="4" step="0.01" v-model.number="settings.zoom" />
         <b>{{ settings.zoom.toFixed(2) }}</b>
+        <KeyBtn path="zoom" />
       </label>
       <label class="row">
         <span>Line width</span>
         <input type="range" min="0.05" max="0.95" step="0.01" v-model.number="settings.thickness" />
         <b>{{ settings.thickness.toFixed(2) }}</b>
+        <KeyBtn path="thickness" />
       </label>
       <label class="row">
         <span>Color mode</span>
@@ -117,19 +125,23 @@ function setRotDeg(layer, deg) {
             {{ c.label }}
           </option>
         </select>
+        <KeyBtn path="colorMode" />
       </label>
       <div class="row colors">
         <span>Colors</span>
         <input type="color" v-model="settings.colorA" title="Background" />
-        <input
-          v-if="settings.colorMode === 0 || settings.colorMode === 1"
-          type="color" v-model="settings.colorB"
-          :title="settings.colorMode === 1 ? 'Gradient middle' : 'Foreground'"
-        />
-        <input
-          v-if="settings.colorMode === 1"
-          type="color" v-model="settings.colorC" title="Gradient end"
-        />
+        <KeyBtn path="colorA" />
+        <template v-if="settings.colorMode === 0 || settings.colorMode === 1">
+          <input
+            type="color" v-model="settings.colorB"
+            :title="settings.colorMode === 1 ? 'Gradient middle' : 'Foreground'"
+          />
+          <KeyBtn path="colorB" />
+        </template>
+        <template v-if="settings.colorMode === 1">
+          <input type="color" v-model="settings.colorC" title="Gradient end" />
+          <KeyBtn path="colorC" />
+        </template>
         <em v-if="settings.colorMode === 2" class="note">hue follows pattern</em>
         <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
       </div>
@@ -141,12 +153,19 @@ function setRotDeg(layer, deg) {
         <span>Animate</span>
         <input type="checkbox" v-model="settings.animate" />
       </label>
+      <label class="row" title="Built-in slow orbit and counter-rotation of layers">
+        <span>Drift</span>
+        <input type="checkbox" v-model="settings.drift" />
+      </label>
       <label class="row">
         <span>Speed</span>
         <input type="range" min="0.1" max="4" step="0.1" v-model.number="settings.animSpeed" />
         <b>{{ settings.animSpeed.toFixed(1) }}×</b>
+        <KeyBtn path="animSpeed" />
       </label>
     </section>
+
+    <TimelineSection />
 
     <section v-for="i in settings.layerCount" :key="i">
       <h2 class="layer-head">
@@ -157,17 +176,20 @@ function setRotDeg(layer, deg) {
         >
           Layer {{ i }}
         </button>
-        <input
-          v-if="settings.colorMode === 3"
-          type="color" v-model="settings.layers[i - 1].color"
-          class="layer-color" title="Layer color"
-        />
+        <template v-if="settings.colorMode === 3">
+          <input
+            type="color" v-model="settings.layers[i - 1].color"
+            class="layer-color" title="Layer color"
+          />
+          <KeyBtn :path="`layers.${i - 1}.color`" />
+        </template>
         <span v-if="settings.activeLayer === i - 1" class="tag">drag target</span>
       </h2>
       <label class="row">
         <span>Frequency</span>
         <input type="range" min="5" max="1000" step="1" v-model.number="settings.layers[i - 1].freq" />
         <b>{{ Math.round(settings.layers[i - 1].freq) }}</b>
+        <KeyBtn :path="`layers.${i - 1}.freq`" />
       </label>
       <label class="row">
         <span>Rotation</span>
@@ -177,16 +199,19 @@ function setRotDeg(layer, deg) {
           @input="setRotDeg(settings.layers[i - 1], $event.target.value)"
         />
         <b>{{ rotDeg(settings.layers[i - 1]) }}°</b>
+        <KeyBtn :path="`layers.${i - 1}.rot`" />
       </label>
       <label class="row">
         <span>Offset X</span>
         <input type="range" min="-1" max="1" step="0.005" v-model.number="settings.layers[i - 1].x" />
         <b>{{ settings.layers[i - 1].x.toFixed(2) }}</b>
+        <KeyBtn :path="`layers.${i - 1}.x`" />
       </label>
       <label class="row">
         <span>Offset Y</span>
         <input type="range" min="-1" max="1" step="0.005" v-model.number="settings.layers[i - 1].y" />
         <b>{{ settings.layers[i - 1].y.toFixed(2) }}</b>
+        <KeyBtn :path="`layers.${i - 1}.y`" />
       </label>
     </section>
 
@@ -403,6 +428,28 @@ button.rec {
 .layer-tab.active {
   border-color: #7c6cf0;
   color: #cfc8ff;
+}
+.keybtn {
+  flex: none;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+  color: #3f3f4c;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.keybtn:hover {
+  color: #a8a2d8;
+  background: none;
+  border: none;
+}
+.keybtn.has {
+  color: #7c6cf0;
+}
+.keybtn.on {
+  color: #ffd166;
 }
 .note {
   font-size: 11px;

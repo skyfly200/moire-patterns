@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { tlSnapshot, tlApply } from './timeline.js'
 
 export const MAX_LAYERS = 4
 
@@ -50,6 +51,7 @@ export function defaultSettings() {
     thickness: 0.5,
     animate: false,
     animSpeed: 1,
+    drift: true,
     colorMode: 0,
     colorA: '#0b0b0f',
     colorB: '#f5f5f0',
@@ -123,7 +125,7 @@ export function applyPreset(preset) {
 
 const SNAP_KEYS = [
   'patternType', 'blendMode', 'aaMode', 'layerCount', 'zoom',
-  'thickness', 'animate', 'animSpeed', 'colorMode', 'colorA', 'colorB', 'colorC',
+  'thickness', 'animate', 'animSpeed', 'drift', 'colorMode', 'colorA', 'colorB', 'colorC',
 ]
 
 export function snapshot() {
@@ -136,6 +138,7 @@ export function snapshot() {
     y: +l.y.toFixed(4),
     color: l.color,
   }))
+  s.tl = tlSnapshot()
   return s
 }
 
@@ -147,6 +150,7 @@ export function applySnapshot(s) {
     })
   }
   settings.activeLayer = 0
+  tlApply(s.tl)
 }
 
 export function encodeSnapshot(s = snapshot()) {
