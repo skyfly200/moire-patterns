@@ -58,6 +58,16 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   while everything else fades smoothly
 - **Video capture** — record the canvas to a WebM video with one click
 - **Full-screen view** — hide the control panel (`H`) or go fullscreen (`F`)
+- **Live input modulation** — map real-time sources onto any numeric
+  setting with per-mapping range and smoothing, applied every frame:
+  - **Audio reactive**: microphone level plus bass / mid / treble bands
+    (Web Audio API)
+  - **MIDI**: any CC from a connected controller, with click-and-twist
+    MIDI learn (Web MIDI API — Chrome/Edge)
+  - **Leap Motion**: palm X/Y/Z, pinch, grab, and palm roll via the
+    Ultraleap tracking service WebSocket (run the Leap service locally)
+  Mappings travel in share links and gallery saves; input devices
+  re-enable per session.
 - **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
   resets), `↑`/`↓` animation speed, `,`/`.` jump to previous/next keyframe,
   `R` randomize, `H` hide UI, `F` fullscreen

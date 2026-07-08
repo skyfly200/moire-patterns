@@ -5,6 +5,7 @@ import { vertexShader, makeFragmentShader } from '../shaders/moire.js'
 import { settings, shaderState, MAX_LAYERS } from '../settings.js'
 import { recState } from '../recorder.js'
 import { timeline, applyTimeline } from '../timeline.js'
+import { applyModulation } from '../modulation.js'
 
 const container = ref(null)
 const canvas = ref(null)
@@ -79,6 +80,7 @@ function frame(now) {
     }
   }
   material.uniforms.uAnimTime.value = animTime
+  applyModulation()
   syncUniforms()
   renderer.render(scene, camera)
 }
