@@ -6,6 +6,7 @@ import TimelineBar from './components/TimelineBar.vue'
 import { settings, loadFromHash, randomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 import { jumpToKey } from './timeline.js'
+import { slideshow, startSlideshow, stopSlideshow } from './slideshow.js'
 
 const canvasRef = ref(null)
 const panelVisible = ref(true)
@@ -27,6 +28,16 @@ function saveCurrent() {
   if (thumb) saveToGallery(thumb)
 }
 
+function toggleSlideshow() {
+  if (slideshow.active) {
+    stopSlideshow()
+    panelVisible.value = true
+  } else {
+    startSlideshow()
+    panelVisible.value = false
+  }
+}
+
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen()
   else document.documentElement.requestFullscreen()
@@ -38,6 +49,7 @@ function onKey(e) {
   const key = e.key.toLowerCase()
   if (key === 'h') panelVisible.value = !panelVisible.value
   else if (key === 'f') toggleFullscreen()
+  else if (key === 's') toggleSlideshow()
   else if (key === 'r') randomize()
   else if (key === ' ' || key === 'a') {
     // Space on a focused button should click the button, not toggle playback.
@@ -68,6 +80,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         @export="canvasRef?.exportPNG()"
         @record="canvasRef?.toggleRecording()"
         @save="saveCurrent"
+        @slideshow="toggleSlideshow"
       />
       <MoireCanvas ref="canvasRef" />
     </div>
@@ -78,6 +91,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </button>
       <button @click="toggleFullscreen">Fullscreen</button>
     </div>
+    <button v-if="slideshow.active" class="slideshow-badge" @click="toggleSlideshow">
+      ■ stop slideshow
+    </button>
     <div v-if="showWarning" class="warn-backdrop">
       <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
         <h2 id="warn-title">⚠️ Photosensitivity warning</h2>
@@ -138,6 +154,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   transition: opacity 0.25s;
 }
 .app.clean :deep(.hint:hover) {
+  opacity: 1;
+}
+.slideshow-badge {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 50;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  color: #c9c9d1;
+  background: rgba(12, 12, 16, 0.65);
+  border: 1px solid #26262e;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  opacity: 0.4;
+  transition: opacity 0.25s;
+}
+.slideshow-badge:hover {
   opacity: 1;
 }
 .warn-backdrop {

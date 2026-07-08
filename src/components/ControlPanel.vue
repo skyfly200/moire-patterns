@@ -16,8 +16,9 @@ import {
 import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
 import { recState } from '../recorder.js'
 import KeyBtn from './KeyBtn.vue'
+import { slideshow } from '../slideshow.js'
 
-defineEmits(['export', 'record', 'save'])
+defineEmits(['export', 'record', 'save', 'slideshow'])
 
 const copiedId = ref(null)
 let copiedTimer = null
@@ -76,6 +77,18 @@ function setRotDeg(layer, deg) {
           {{ p.name }}
         </button>
         <button class="accent" @click="randomize()">Randomize</button>
+      </div>
+      <div class="row slideshow-row">
+        <button
+          class="slideshow-btn"
+          title="Cycle through your saved gallery (or these presets while the gallery is empty), hiding the UI. Shortcut: S"
+          @click="$emit('slideshow')"
+        >
+          ▶ Slideshow
+        </button>
+        <span>every</span>
+        <input type="number" min="2" max="60" step="1" v-model.number="slideshow.interval" />
+        <span>s</span>
       </div>
     </section>
 
@@ -379,6 +392,23 @@ input[type='checkbox'] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+.slideshow-row {
+  font-size: 11.5px;
+  color: #9a9aa5;
+}
+.slideshow-row .slideshow-btn {
+  flex: 1;
+}
+.slideshow-row input {
+  width: 46px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #e4e4e9;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
 }
 button {
   padding: 7px 8px;
