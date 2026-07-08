@@ -50,6 +50,9 @@ function onKey(e) {
   if (key === 'h') panelVisible.value = !panelVisible.value
   else if (key === 'f') toggleFullscreen()
   else if (key === 's') toggleSlideshow()
+  else if (key === 'escape') {
+    if (slideshow.active) toggleSlideshow()
+  }
   else if (key === 'r') randomize()
   else if (key === ' ' || key === 'a') {
     // Space on a focused button should click the button, not toggle playback.
@@ -94,7 +97,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <button @click="toggleFullscreen">Fullscreen</button>
     </div>
     <button v-if="slideshow.active" class="slideshow-badge" @click="toggleSlideshow">
-      ■ stop slideshow
+      ■ stop display (Esc)
     </button>
     <div v-if="showWarning" class="warn-backdrop">
       <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
@@ -165,6 +168,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .app.clean :deep(.hint:hover) {
   opacity: 1;
 }
+/* Invisible until hovered so the display view shows only the art;
+   the enlarged padding/margin keeps a findable hit area in the corner. */
 .slideshow-badge {
   position: fixed;
   bottom: 12px;
@@ -178,10 +183,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-radius: 999px;
   cursor: pointer;
   backdrop-filter: blur(4px);
-  opacity: 0.4;
+  opacity: 0;
   transition: opacity 0.25s;
 }
-.slideshow-badge:hover {
+.slideshow-badge::before {
+  content: '';
+  position: absolute;
+  inset: -14px -16px;
+}
+.slideshow-badge:hover,
+.slideshow-badge:focus-visible {
   opacity: 1;
 }
 .warn-backdrop {

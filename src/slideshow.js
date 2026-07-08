@@ -2,19 +2,23 @@ import { reactive, watch } from 'vue'
 import { gallery, loadFromGallery } from './gallery.js'
 import { settings, PRESETS, applyPreset, randomize } from './settings.js'
 
-// Slideshow modes:
+// Display view modes:
 //  - gallery: cycles through the saved gallery (or the built-in presets
 //    while the gallery has fewer than two entries)
 //  - shuffle: jumps to fully randomized settings every interval
 //  - morph:   continuously eases the numeric settings (frequencies,
 //    rotations, offsets, zoom, line width, colors) toward new random
 //    targets, reaching one per interval
+//  - shufflemorph: shuffle + morph — pattern types, combine ops, and layer
+//    count jump to random picks at the start of each cycle while all
+//    numeric settings fade smoothly toward random targets
 // None of the modes ever enables animation by itself (photosensitivity).
 
 export const SLIDESHOW_MODES = [
   { value: 'gallery', label: 'Gallery' },
   { value: 'shuffle', label: 'Shuffle' },
   { value: 'morph', label: 'Morph' },
+  { value: 'shufflemorph', label: 'Shuffle + Morph' },
 ]
 
 export const slideshow = reactive({
@@ -86,13 +90,37 @@ function randomMorphTarget() {
     thickness: rnd(0.35, 0.65),
     colorA: Math.random() < 0.5 ? settings.colorA : randomHex(),
     colorB: Math.random() < 0.5 ? settings.colorB : randomHex(),
-    layers: settings.layers.map(() => ({
-      freq: baseFreq * rnd(0.96, 1.04),
+    layers: settings.layers.map((l, i) => ({
+      freq: l.op === 8 ? rnd(30, 80) : baseFreq * rnd(0.96, 1.04),
       rot: rnd(-Math.PI, Math.PI) * 0.25,
       x: rnd(-0.3, 0.3),
       y: rnd(-0.3, 0.3),
     })),
   }
+}
+
+// Shuffle + morph: re-roll the discrete options (they can't fade) at the
+// start of each cycle; the numeric target then fades in as usual.
+function shuffleDiscretes() {
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+  settings.layerCount = 2 + Math.floor(rnd(0, 4))
+  const basePattern = pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
+  settings.layers.forEach((l) => {
+    l.pattern = Math.random() < 0.75 ? basePattern : pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    l.op = pick([0, 0, 1, 1, 3, 4, 5])
+  })
+  if (settings.layerCount >= 3 && Math.random() < 0.4) {
+    const m = settings.layers[1]
+    m.op = 8
+    if (Math.random() < 0.5) m.pattern = pick([10, 11, 12, 13, 14])
+  }
+}
+
+function nextMorphCycle(now) {
+  if (slideshow.mode === 'shufflemorph') shuffleDiscretes()
+  morphFrom = captureMorphState()
+  morphTo = randomMorphTarget()
+  morphStart = now
 }
 
 let morphFrom = null
@@ -116,11 +144,7 @@ function applyMorph(u) {
 function morphTick(now) {
   const u = Math.min((now - morphStart) / (slideshow.interval * 1000), 1)
   applyMorph(u)
-  if (u >= 1) {
-    morphFrom = captureMorphState()
-    morphTo = randomMorphTarget()
-    morphStart = now
-  }
+  if (u >= 1) nextMorphCycle(now)
   rafId = requestAnimationFrame(morphTick)
 }
 
@@ -137,9 +161,7 @@ export function startSlideshow() {
     randomize()
     timer = setInterval(randomize, slideshow.interval * 1000)
   } else {
-    morphFrom = captureMorphState()
-    morphTo = randomMorphTarget()
-    morphStart = performance.now()
+    nextMorphCycle(performance.now())
     rafId = requestAnimationFrame(morphTick)
   }
 }

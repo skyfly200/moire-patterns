@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
     />
     <div class="hint">
       drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · space: play/pause ·
-      ↑↓: speed · R: randomize · S: slideshow · H: hide UI · F: fullscreen
+      ↑↓: speed · R: randomize · S: display view (Esc exits) · H: hide UI · F: fullscreen
     </div>
     <div v-if="recState.active" class="rec-badge">● REC</div>
   </div>
