@@ -10,6 +10,18 @@ import { jumpToKey } from './timeline.js'
 const canvasRef = ref(null)
 const panelVisible = ref(true)
 
+const WARN_KEY = 'moire-epilepsy-ack'
+const showWarning = ref(!localStorage.getItem(WARN_KEY))
+
+function acknowledgeWarning() {
+  try {
+    localStorage.setItem(WARN_KEY, '1')
+  } catch {
+    // Private browsing — the warning will just show again next visit.
+  }
+  showWarning.value = false
+}
+
 function saveCurrent() {
   const thumb = canvasRef.value?.captureThumb()
   if (thumb) saveToGallery(thumb)
@@ -21,6 +33,7 @@ function toggleFullscreen() {
 }
 
 function onKey(e) {
+  if (showWarning.value) return
   if (e.target.closest('input, select, textarea')) return
   const key = e.key.toLowerCase()
   if (key === 'h') panelVisible.value = !panelVisible.value
@@ -65,6 +78,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </button>
       <button @click="toggleFullscreen">Fullscreen</button>
     </div>
+    <div v-if="showWarning" class="warn-backdrop">
+      <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
+        <h2 id="warn-title">⚠️ Photosensitivity warning</h2>
+        <p>
+          This tool generates high-contrast moiré and interference patterns
+          that can <strong>flicker, strobe, or shift rapidly</strong>,
+          especially when animated. A small percentage of people may
+          experience seizures or discomfort when exposed to flashing lights
+          or patterns like these.
+        </p>
+        <p>
+          If you have photosensitive epilepsy or a history of seizures,
+          please be cautious — keep animation speeds low, avoid high-contrast
+          colors at high frequencies, and stop immediately if you feel dizzy,
+          disoriented, or unwell.
+        </p>
+        <button class="warn-ok" @click="acknowledgeWarning">I understand</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -107,6 +139,55 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
 .app.clean :deep(.hint:hover) {
   opacity: 1;
+}
+.warn-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 5, 8, 0.82);
+  backdrop-filter: blur(6px);
+}
+.warn-dialog {
+  max-width: 460px;
+  padding: 26px 28px;
+  background: #14141a;
+  border: 1px solid #35314f;
+  border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.warn-dialog h2 {
+  font-size: 16px;
+  font-weight: 650;
+  color: #ffd166;
+  margin-bottom: 12px;
+}
+.warn-dialog p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #c9c9d1;
+  margin-bottom: 12px;
+}
+.warn-dialog strong {
+  color: #e4e4e9;
+}
+.warn-ok {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e9e6ff;
+  background: #342e6e;
+  border: 1px solid #4c42a3;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.warn-ok:hover {
+  background: #3e3784;
 }
 .view-buttons button {
   padding: 5px 12px;
