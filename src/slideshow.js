@@ -15,6 +15,7 @@ import { settings, PRESETS, applyPreset, randomize } from './settings.js'
 // None of the modes ever enables animation by itself (photosensitivity).
 
 export const SLIDESHOW_MODES = [
+  { value: 'current', label: 'Current settings' },
   { value: 'gallery', label: 'Gallery' },
   { value: 'shuffle', label: 'Shuffle' },
   { value: 'morph', label: 'Morph' },
@@ -23,8 +24,9 @@ export const SLIDESHOW_MODES = [
 
 export const slideshow = reactive({
   active: false,
-  mode: 'gallery',
-  interval: 8, // seconds per slide / per morph target
+  mode: 'current',
+  interval: 8, // seconds per slide / per morph cycle
+  morphRate: 8, // seconds a morph fade takes (clamped to the interval)
   index: 0,
 })
 
@@ -148,9 +150,10 @@ function applyMorph(u) {
 }
 
 function morphTick(now) {
-  const u = Math.min((now - morphStart) / (slideshow.interval * 1000), 1)
-  applyMorph(u)
-  if (u >= 1) nextMorphCycle(now)
+  const elapsed = now - morphStart
+  const fadeMs = Math.min(slideshow.morphRate, slideshow.interval) * 1000
+  applyMorph(Math.min(elapsed / fadeMs, 1))
+  if (elapsed >= slideshow.interval * 1000) nextMorphCycle(now)
   rafId = requestAnimationFrame(morphTick)
 }
 
@@ -160,7 +163,9 @@ export function startSlideshow() {
   if (slideshow.active) return
   slideshow.active = true
   slideshow.index = 0
-  if (slideshow.mode === 'gallery') {
+  if (slideshow.mode === 'current') {
+    // Just present the current settings — no timers, nothing changes.
+  } else if (slideshow.mode === 'gallery') {
     advance()
     timer = setInterval(advance, slideshow.interval * 1000)
   } else if (slideshow.mode === 'shuffle') {

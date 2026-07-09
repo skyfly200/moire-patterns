@@ -30,6 +30,7 @@ function makeUniforms() {
     uColorB: { value: new THREE.Color('#f5f5f0') },
     uColorC: { value: new THREE.Color('#ff4d6d') },
     uLayerColor: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Color()) },
+    uLayerAlpha: { value: new Array(MAX_LAYERS).fill(1) },
     uOffset: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
     uFreq: { value: new Array(MAX_LAYERS).fill(140) },
     uRot: { value: new Array(MAX_LAYERS).fill(0) },
@@ -54,6 +55,7 @@ function syncUniforms() {
     u.uFreq.value[i] = l.freq
     u.uRot.value[i] = l.rot
     u.uLayerColor.value[i].set(l.color)
+    u.uLayerAlpha.value[i] = l.alpha ?? 1
     u.uPattern.value[i] = l.pattern
     u.uOp.value[i] = l.op
   }
@@ -62,9 +64,14 @@ function syncUniforms() {
 function resize() {
   const w = container.value.clientWidth
   const h = container.value.clientHeight
-  const scale = settings.resScale === 0
+  // resScale: 0 = auto (device pixel ratio), ≤4 = multiplier of CSS pixels,
+  // >4 = fixed backing-store pixel height.
+  const rs = +settings.resScale
+  const scale = rs === 0
     ? Math.min(window.devicePixelRatio || 1, 2)
-    : settings.resScale
+    : rs <= 4
+      ? rs
+      : Math.min(rs / Math.max(h, 1), 4)
   renderer.setPixelRatio(scale)
   renderer.setSize(w, h, false)
   material.uniforms.uResolution.value.set(w * scale, h * scale)
@@ -288,7 +295,8 @@ onBeforeUnmount(() => {
     />
     <div class="hint">
       drag: move layer {{ settings.activeLayer + 1 }} · scroll: zoom · space: play/pause ·
-      ↑↓: speed · R: randomize · S: display view (Esc exits) · H: hide UI · F: fullscreen
+      ↑↓: speed · R: randomize · G: gallery · M: mode · 1-9: load mode ·
+      S: display view (Esc exits) · H: hide UI · F: fullscreen
     </div>
     <div v-if="recState.active" class="rec-badge">● REC</div>
     <div v-if="settings.showFps" class="fps">{{ fps }} fps</div>

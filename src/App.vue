@@ -2,9 +2,11 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import MoireCanvas from './components/MoireCanvas.vue'
 import ControlPanel from './components/ControlPanel.vue'
+import ShareDrawer from './components/ShareDrawer.vue'
 import TimelineBar from './components/TimelineBar.vue'
 import { settings, loadFromHash, randomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
+import { modes, saveMode, loadMode } from './modes.js'
 import { jumpToKey } from './timeline.js'
 import { slideshow, startSlideshow, stopSlideshow } from './slideshow.js'
 
@@ -26,6 +28,12 @@ function acknowledgeWarning() {
 function saveCurrent() {
   const thumb = canvasRef.value?.captureThumb()
   if (thumb) saveToGallery(thumb)
+}
+
+function saveCurrentMode() {
+  const name = window.prompt('Name this mode:', 'Mode ' + (modes.length + 1))
+  if (name === null) return
+  saveMode(name, canvasRef.value?.captureThumb())
 }
 
 function toggleSlideshow() {
@@ -54,6 +62,12 @@ function onKey(e) {
     if (slideshow.active) toggleSlideshow()
   }
   else if (key === 'r') randomize()
+  else if (key === 'g') saveCurrent()
+  else if (key === 'm') saveCurrentMode()
+  else if (key >= '1' && key <= '9') {
+    const mode = modes[+key - 1]
+    if (mode) loadMode(mode)
+  }
   else if (key === ' ' || key === 'a') {
     // Space on a focused button should click the button, not toggle playback.
     if (key === ' ' && e.target.closest('button')) return
@@ -82,12 +96,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <div class="main">
       <ControlPanel
         v-show="panelVisible"
-        @export="canvasRef?.exportPNG()"
-        @record="canvasRef?.toggleRecording()"
-        @save="saveCurrent"
         @slideshow="toggleSlideshow"
       />
       <MoireCanvas ref="canvasRef" />
+      <ShareDrawer
+        v-show="panelVisible"
+        @export="canvasRef?.exportPNG()"
+        @record="canvasRef?.toggleRecording()"
+        @save="saveCurrent"
+        @savemode="saveCurrentMode"
+      />
     </div>
     <TimelineBar v-show="panelVisible" />
     <div class="view-buttons">

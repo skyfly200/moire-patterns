@@ -27,6 +27,7 @@ const KEY_EPS = 0.051 // seconds — clicks this close to an existing key toggle
 export const timeline = reactive({
   duration: 8,
   time: 0,
+  smoothLoop: false, // blend from the last keyframe back into the first
   tracks: [], // { path, easing, keys: [{ t, v }] } sorted by t
 })
 
@@ -89,6 +90,22 @@ function lerpColor(a, b, u) {
 
 export function evalTrack(tr, t) {
   const keys = tr.keys
+  // Smooth loop: past the last key (or before the first), interpolate from
+  // the last key back to the first across the loop boundary.
+  if (timeline.smoothLoop && keys.length > 1) {
+    const a = keys[keys.length - 1]
+    const b = keys[0]
+    if (t > a.t || t < b.t) {
+      const span = timeline.duration - a.t + b.t
+      if (span > 1e-6) {
+        const dt = t >= a.t ? t - a.t : t + (timeline.duration - a.t)
+        const u = EASE[tr.easing](Math.min(dt / span, 1))
+        if (isColorPath(tr.path)) return lerpColor(a.v, b.v, u)
+        const v = a.v + (b.v - a.v) * u
+        return isIntPath(tr.path) ? Math.round(v) : v
+      }
+    }
+  }
   if (t <= keys[0].t) return keys[0].v
   if (t >= keys[keys.length - 1].t) return keys[keys.length - 1].v
   let i = 0
@@ -127,6 +144,7 @@ const LAYER_LABELS = {
   x: 'offset X',
   y: 'offset Y',
   color: 'color',
+  alpha: 'opacity',
   pattern: 'type',
   op: 'combine',
 }
@@ -159,6 +177,7 @@ export function tlSnapshot() {
   if (!timeline.tracks.length) return undefined
   return {
     d: timeline.duration,
+    loop: timeline.smoothLoop ? 1 : undefined,
     tracks: timeline.tracks.map((tr) => ({
       p: tr.path,
       e: tr.easing,
@@ -171,9 +190,11 @@ export function tlApply(s) {
   timeline.time = 0
   if (!s) {
     timeline.tracks = []
+    timeline.smoothLoop = false
     return
   }
   timeline.duration = s.d || 8
+  timeline.smoothLoop = !!s.loop
   timeline.tracks = (s.tracks || []).map((tr) => ({
     path: tr.p,
     easing: EASINGS.includes(tr.e) ? tr.e : 'linear',

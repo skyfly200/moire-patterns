@@ -143,6 +143,10 @@ function gradientStyle(tr) {
           title="Timeline length (seconds)"
         />s
       </span>
+      <label class="loop" title="Blend from the last keyframe back into the first so the loop has no jump">
+        <input type="checkbox" v-model="timeline.smoothLoop" />
+        smooth loop
+      </label>
       <span v-if="!timeline.tracks.length" class="tip">
         keyframe any control with its ◆ button — tracks appear here
       </span>
@@ -283,6 +287,17 @@ function gradientStyle(tr) {
 .tip {
   font-size: 11px;
   color: #6f6f7a;
+}
+.loop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #9a9aa5;
+  cursor: pointer;
+}
+.loop input {
+  accent-color: #7c6cf0;
 }
 .spacer {
   flex: 1;
