@@ -104,9 +104,12 @@ function frame(now) {
   renderer.render(scene, camera)
 }
 
-// Drag on the canvas to move the active layer's center.
+// Drag on the canvas to move the active layer's center. Two fingers on
+// touch pinch-to-zoom (there is no scroll wheel on a phone).
 let dragging = false
 let dragStart = null
+const activePointers = new Map()
+let pinchStart = null
 
 function planeDelta(e) {
   const rect = canvas.value.getBoundingClientRect()
@@ -115,7 +118,19 @@ function planeDelta(e) {
   return { x: e.clientX * scale, y: -e.clientY * scale }
 }
 
+function pinchDistance() {
+  const pts = [...activePointers.values()]
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+}
+
 function onPointerDown(e) {
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (activePointers.size === 2) {
+    // Second finger down: start a pinch, cancel any in-progress drag.
+    dragging = false
+    pinchStart = { dist: pinchDistance(), zoom: settings.zoom }
+    return
+  }
   const l = settings.layers[settings.activeLayer]
   const p = planeDelta(e)
   dragging = true
@@ -124,6 +139,14 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
+  if (activePointers.has(e.pointerId)) {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  }
+  if (pinchStart && activePointers.size === 2) {
+    const ratio = pinchDistance() / (pinchStart.dist || 1)
+    settings.zoom = Math.min(4, Math.max(0.25, pinchStart.zoom / ratio))
+    return
+  }
   if (!dragging) return
   const l = settings.layers[settings.activeLayer]
   const p = planeDelta(e)
@@ -131,7 +154,9 @@ function onPointerMove(e) {
   l.y = +(dragStart.ly + p.y - dragStart.py).toFixed(4)
 }
 
-function onPointerUp() {
+function onPointerUp(e) {
+  if (e && activePointers.has(e.pointerId)) activePointers.delete(e.pointerId)
+  if (activePointers.size < 2) pinchStart = null
   dragging = false
 }
 

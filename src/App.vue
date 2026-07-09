@@ -13,6 +13,13 @@ import { slideshow, startSlideshow, stopSlideshow } from './slideshow.js'
 const canvasRef = ref(null)
 const panelVisible = ref(true)
 
+// Mobile only: which slide-over panel is open ('', 'controls', 'share').
+// Ignored on desktop, where both panels are always docked.
+const mobilePanel = ref('')
+function toggleMobile(which) {
+  mobilePanel.value = mobilePanel.value === which ? '' : which
+}
+
 const WARN_KEY = 'moire-epilepsy-ack'
 const showWarning = ref(!localStorage.getItem(WARN_KEY))
 
@@ -92,7 +99,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="app" :class="{ clean: !panelVisible }">
+  <div class="app" :class="[{ clean: !panelVisible }, mobilePanel ? 'm-open m-' + mobilePanel : '']">
     <div class="main">
       <ControlPanel
         v-show="panelVisible"
@@ -117,6 +124,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <button v-if="slideshow.active" class="slideshow-badge" @click="toggleSlideshow">
       ■ stop display (Esc)
     </button>
+
+    <!-- Mobile-only: backdrop + bottom toolbar (hidden on desktop via CSS) -->
+    <div v-show="mobilePanel" class="mobile-backdrop" @click="mobilePanel = ''" />
+    <nav class="mobile-bar">
+      <button :class="{ active: mobilePanel === 'controls' }" @click="toggleMobile('controls')">
+        ☰<small>Controls</small>
+      </button>
+      <button @click="randomize()">🎲<small>Random</small></button>
+      <button @click="settings.animate = !settings.animate">
+        {{ settings.animate ? '❚❚' : '▶' }}<small>{{ settings.animate ? 'Pause' : 'Play' }}</small>
+      </button>
+      <button :class="{ active: mobilePanel === 'share' }" @click="toggleMobile('share')">
+        ⤴<small>Share</small>
+      </button>
+      <button @click="toggleFullscreen">⛶<small>Full</small></button>
+    </nav>
     <div v-if="showWarning" class="warn-backdrop">
       <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
         <h2 id="warn-title">⚠️ Seizure warning — photosensitive epilepsy</h2>
@@ -276,5 +299,118 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .view-buttons button:hover {
   background: rgba(35, 35, 44, 0.85);
   border-color: #3a3a48;
+}
+
+/* The mobile toolbar and backdrop exist in the DOM at all sizes but only
+   show on small screens (below). Desktop layout is entirely unchanged. */
+.mobile-bar,
+.mobile-backdrop {
+  display: none;
+}
+
+/* ---- Mobile layout (phones / narrow screens) ------------------------ */
+@media (max-width: 768px) {
+  /* Canvas fills the screen; the two side panels become slide-over sheets. */
+  .main {
+    display: block;
+    position: relative;
+  }
+  .main :deep(.canvas-wrap) {
+    position: absolute;
+    inset: 0;
+  }
+  /* The keyboard-shortcut hint is meaningless on touch. */
+  .main :deep(.hint) {
+    display: none;
+  }
+
+  .panel,
+  .drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 88%;
+    max-width: 380px;
+    transition: transform 0.28s ease;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    /* Clear the bottom toolbar and any device safe-area inset. */
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    /* Closed panels never intercept canvas touches, even mid-slide. */
+    pointer-events: none;
+  }
+  .panel {
+    left: 0;
+    transform: translateX(-100%);
+  }
+  .drawer {
+    right: 0;
+    transform: translateX(100%);
+  }
+  .app.m-controls .panel {
+    transform: none;
+    pointer-events: auto;
+  }
+  .app.m-share .drawer {
+    transform: none;
+    pointer-events: auto;
+  }
+
+  /* The timeline bar and desktop hide/fullscreen pills are desktop-only. */
+  .tbar,
+  .view-buttons {
+    display: none;
+  }
+
+  .mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(5, 5, 8, 0.5);
+  }
+
+  .mobile-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(16, 16, 20, 0.96);
+    border-top: 1px solid #212129;
+    backdrop-filter: blur(8px);
+  }
+  .mobile-bar button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 9px 2px;
+    font-size: 17px;
+    color: #c9c9d1;
+    background: none;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+  }
+  .mobile-bar button small {
+    font-size: 9.5px;
+    color: #85858f;
+    letter-spacing: 0.02em;
+  }
+  .mobile-bar button.active {
+    color: #cfc8ff;
+  }
+  .mobile-bar button.active small {
+    color: #8f86d8;
+  }
+
+  /* The display-view stop badge sits above the toolbar. */
+  .slideshow-badge {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>
