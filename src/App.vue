@@ -13,11 +13,18 @@ import { slideshow, startSlideshow, stopSlideshow } from './slideshow.js'
 const canvasRef = ref(null)
 const panelVisible = ref(true)
 
-// Mobile only: which slide-over panel is open ('', 'controls', 'share').
-// Ignored on desktop, where both panels are always docked.
+// Mobile only: which slide-over panel is open ('', 'controls', 'share') and
+// whether the timeline sheet is up. Ignored on desktop, where both panels
+// and the timeline are always docked.
 const mobilePanel = ref('')
+const mobileTimeline = ref(false)
 function toggleMobile(which) {
+  mobileTimeline.value = false
   mobilePanel.value = mobilePanel.value === which ? '' : which
+}
+function toggleMobileTimeline() {
+  mobilePanel.value = ''
+  mobileTimeline.value = !mobileTimeline.value
 }
 
 const WARN_KEY = 'moire-epilepsy-ack'
@@ -99,7 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="app" :class="[{ clean: !panelVisible }, mobilePanel ? 'm-open m-' + mobilePanel : '']">
+  <div class="app" :class="[{ clean: !panelVisible }, mobilePanel ? 'm-open m-' + mobilePanel : '', mobileTimeline ? 'm-timeline' : '']">
     <div class="main">
       <ControlPanel
         v-show="panelVisible"
@@ -134,6 +141,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <button @click="randomize()">🎲<small>Random</small></button>
       <button @click="settings.animate = !settings.animate">
         {{ settings.animate ? '❚❚' : '▶' }}<small>{{ settings.animate ? 'Pause' : 'Play' }}</small>
+      </button>
+      <button :class="{ active: mobileTimeline }" @click="toggleMobileTimeline">
+        ◆<small>Timeline</small>
       </button>
       <button :class="{ active: mobilePanel === 'share' }" @click="toggleMobile('share')">
         ⤴<small>Share</small>
@@ -356,10 +366,29 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     pointer-events: auto;
   }
 
-  /* The timeline bar and desktop hide/fullscreen pills are desktop-only. */
-  .tbar,
+  /* The desktop hide/fullscreen pills are desktop-only. The timeline bar is
+     hidden by default and revealed as a bottom sheet on demand. */
   .view-buttons {
     display: none;
+  }
+  .tbar {
+    display: none;
+  }
+  .app.m-timeline .tbar {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    z-index: 58;
+    max-height: 52vh;
+    border-top: 1px solid #212129;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.55);
+  }
+  /* Let the timeline toolbar wrap at narrow widths instead of overflowing. */
+  .app.m-timeline .tbar :deep(.toolbar) {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 
   .mobile-backdrop {
