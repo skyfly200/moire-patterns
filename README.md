@@ -109,9 +109,10 @@ Two flavors are on display:
 
 On phones and narrow screens the canvas goes full-bleed and the control
 panel and share drawer become slide-over sheets, opened from a bottom
-toolbar (Controls · Random · Play · Share · Fullscreen). Pinch to zoom,
-drag to move the active layer. The desktop three-column layout is
-unchanged above 768px.
+toolbar (Controls · Random · Play · Timeline · Share · Fullscreen). The
+keyframe timeline is hidden by default and slides up as a bottom sheet
+from the Timeline button. Pinch to zoom, drag to move the active layer.
+The desktop three-column layout is unchanged above 768px.
 
 ## Development
 
