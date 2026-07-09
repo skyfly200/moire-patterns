@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
 import { setParam, trackLabel } from './timeline.js'
 import { MAX_LAYERS } from './shaders/moire.js'
-import { settings, randomize } from './settings.js'
+import { settings, randomize, randomizeColors } from './settings.js'
 import { nextSlide } from './slideshow.js'
 
 // Live-input modulation: audio (microphone), MIDI controllers, and a Leap
@@ -33,6 +33,11 @@ export const LEAP_SOURCES = [
   { value: 'leap.roll', label: 'Leap · palm roll' },
 ]
 
+export const ARTNET_SOURCES = Array.from({ length: 16 }, (_, i) => ({
+  value: 'artnet.ch' + (i + 1),
+  label: 'Art-Net · ch ' + (i + 1),
+}))
+
 export const MOD_TARGETS = (() => {
   const t = [
     { path: 'zoom', min: 0.25, max: 4 },
@@ -44,13 +49,15 @@ export const MOD_TARGETS = (() => {
     t.push({ path: `layers.${i}.rot`, min: -Math.PI, max: Math.PI })
     t.push({ path: `layers.${i}.x`, min: -1, max: 1 })
     t.push({ path: `layers.${i}.y`, min: -1, max: 1 })
+    t.push({ path: `layers.${i}.alpha`, min: 0, max: 1 })
   }
   return t.map((x) => ({ ...x, label: trackLabel(x.path) }))
 })()
 
 export const modState = reactive({
   audio: { enabled: false, error: '', level: 0, bass: 0, mid: 0, treble: 0, beat: 0, bpm: 0 },
-  beat: { action: 'none', every: 1, count: 0 },
+  beat: { action: 'none', every: 1, count: 0, sens: 1 },
+  artnet: { enabled: false, connected: false, error: '', values: {} },
   midi: { enabled: false, error: '', inputs: 0, lastCC: null, values: {} },
   leap: {
     enabled: false, error: '', connected: false, hands: 0,
@@ -92,8 +99,8 @@ export function modSnapshot() {
   const list = modState.mappings.map(({ source, path, min, max, smooth }) => ({
     source, path, min, max, smooth,
   }))
-  const beat = modState.beat.action !== 'none'
-    ? { action: modState.beat.action, every: modState.beat.every }
+  const beat = modState.beat.action !== 'none' || modState.beat.sens !== 1
+    ? { action: modState.beat.action, every: modState.beat.every, sens: modState.beat.sens }
     : undefined
   if (!list.length && !beat) return undefined
   return { list, beat }
@@ -113,6 +120,7 @@ export function modApply(mods) {
   const beat = !Array.isArray(mods) && mods?.beat
   modState.beat.action = beat ? beat.action : 'none'
   modState.beat.every = beat ? Math.max(1, +beat.every || 1) : 1
+  modState.beat.sens = beat ? Math.min(2, Math.max(0.5, +beat.sens || 1)) : 1
   modState.beat.count = 0
 }
 
@@ -122,6 +130,7 @@ let audioCtx = null
 let analyser = null
 let mediaStream = null
 let freqData = null
+let analysisTimer = null
 
 export async function startAudio() {
   try {
@@ -130,9 +139,11 @@ export async function startAudio() {
     const src = audioCtx.createMediaStreamSource(mediaStream)
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 1024
-    analyser.smoothingTimeConstant = 0.5
+    // Low smoothing: spectral flux needs sharp frame-to-frame differences.
+    analyser.smoothingTimeConstant = 0.2
     src.connect(analyser)
     freqData = new Uint8Array(analyser.frequencyBinCount)
+    analysisTimer = setInterval(updateAudio, 20)
     modState.audio.error = ''
     modState.audio.enabled = true
   } catch (e) {
@@ -142,10 +153,13 @@ export async function startAudio() {
 }
 
 export function stopAudio() {
+  clearInterval(analysisTimer)
+  analysisTimer = null
   mediaStream?.getTracks().forEach((t) => t.stop())
   audioCtx?.close()
   audioCtx = analyser = mediaStream = freqData = null
-  bassHistory = []
+  prevSpec = null
+  fluxHistory = []
   beatIntervals = []
   lastBeatAt = 0
   Object.assign(modState.audio, {
@@ -153,47 +167,55 @@ export function stopAudio() {
   })
 }
 
-// Beat detection: energy-based onset detection on the bass band — a beat is
-// a bass level well above its recent average, with a refractory period so
-// one kick registers once.
-let bassHistory = []
+// Beat detection: spectral flux (positive spectral difference between
+// analysis frames, low bands weighted) with an adaptive mean+deviation
+// threshold and a refractory period. Analysis runs on its own 20 ms timer
+// so a slow render frame rate cannot starve the detector.
+let prevSpec = null
+let fluxHistory = []
 let lastBeatAt = 0
 let beatIntervals = []
-
-function hslToHex(h, s, l) {
-  const a = s * Math.min(l, 1 - l)
-  const f = (n) => {
-    const k = (n + h / 30) % 12
-    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
-    return Math.round(c * 255).toString(16).padStart(2, '0')
-  }
-  return '#' + f(0) + f(8) + f(4)
-}
 
 function fireBeatAction() {
   modState.beat.count++
   if (modState.beat.action === 'none') return
   if (modState.beat.count % Math.max(1, modState.beat.every) !== 0) return
-  if (modState.beat.action === 'randomize') {
-    randomize()
-  } else if (modState.beat.action === 'colors') {
-    const hue = Math.random() * 360
-    settings.colorA = hslToHex(hue, 0.5, 0.06)
-    settings.colorB = hslToHex((hue + 120 + Math.random() * 120) % 360, 0.85, 0.62)
-  } else if (modState.beat.action === 'slide') {
-    nextSlide()
-  }
+  if (modState.beat.action === 'randomize') randomize()
+  else if (modState.beat.action === 'colors') randomizeColors()
+  else if (modState.beat.action === 'slide') nextSlide()
 }
 
-function detectBeat() {
-  const bass = modState.audio.bass
-  bassHistory.push(bass)
-  if (bassHistory.length > 43) bassHistory.shift() // ~0.7 s at 60 fps
-  modState.audio.beat *= 0.9
-  if (bassHistory.length < 20) return
-  const mean = bassHistory.reduce((a, b) => a + b, 0) / bassHistory.length
+function detectBeat(binHz) {
+  // Positive flux over bins up to ~4 kHz, with the low bins double-weighted
+  // (kicks and snares live there).
+  const bins = Math.min(freqData.length, Math.ceil(4000 / binHz))
+  const bassBins = Math.ceil(250 / binHz)
+  if (!prevSpec || prevSpec.length !== bins) {
+    prevSpec = new Uint8Array(freqData.subarray(0, bins))
+    return
+  }
+  let flux = 0
+  for (let i = 0; i < bins; i++) {
+    const d = freqData[i] - prevSpec[i]
+    if (d > 0) flux += i < bassBins ? d * 2 : d
+    prevSpec[i] = freqData[i]
+  }
+  flux /= bins * 255
+
+  fluxHistory.push(flux)
+  if (fluxHistory.length > 64) fluxHistory.shift() // ~1.3 s at 50 Hz
+  modState.audio.beat = Math.max(0, modState.audio.beat - 0.08)
+  if (fluxHistory.length < 25) return
+
+  const mean = fluxHistory.reduce((a, b) => a + b, 0) / fluxHistory.length
+  const dev = Math.sqrt(
+    fluxHistory.reduce((a, b) => a + (b - mean) * (b - mean), 0) / fluxHistory.length,
+  )
+  // Higher sensitivity lowers the deviation multiplier (0.5 → strict 2.7σ,
+  // 2 → loose 0.3σ); a small absolute floor rejects silence.
+  const threshold = mean + dev * (3.2 - modState.beat.sens * 1.45) + 0.003
   const now = performance.now()
-  if (bass > 0.06 && bass > mean * 1.35 && now - lastBeatAt > 250) {
+  if (flux > threshold && now - lastBeatAt > 180) {
     if (lastBeatAt) {
       beatIntervals.push(now - lastBeatAt)
       if (beatIntervals.length > 8) beatIntervals.shift()
@@ -226,7 +248,7 @@ function updateAudio() {
   modState.audio.mid = band(250, 2000)
   modState.audio.treble = band(2000, 8000)
   modState.audio.level = band(20, 8000)
-  detectBeat()
+  detectBeat(binHz)
 }
 
 // --- MIDI (Web MIDI API) ------------------------------------------------
@@ -337,6 +359,55 @@ export function stopLeap() {
   modState.leap.hands = 0
 }
 
+// --- Art-Net (DMX over the bundled WebSocket bridge) ---------------------
+//
+// Browsers cannot receive UDP, so Art-Net comes in through a tiny local
+// bridge: `node tools/artnet-bridge.mjs` listens on UDP 6454 and relays
+// ArtDMX frames to ws://localhost:6455.
+
+let artWs = null
+
+export function startArtnet() {
+  modState.artnet.enabled = true
+  modState.artnet.error = ''
+  try {
+    artWs = new WebSocket('ws://127.0.0.1:6455')
+  } catch (e) {
+    modState.artnet.error = 'Could not open bridge socket: ' + (e.message || e.name)
+    modState.artnet.enabled = false
+    return
+  }
+  artWs.onopen = () => {
+    modState.artnet.connected = true
+    modState.artnet.error = ''
+  }
+  artWs.onerror = () => {
+    modState.artnet.error =
+      'Art-Net bridge not reachable — run `node tools/artnet-bridge.mjs` on this machine'
+  }
+  artWs.onclose = () => {
+    modState.artnet.connected = false
+  }
+  artWs.onmessage = (ev) => {
+    let msg
+    try {
+      msg = JSON.parse(ev.data)
+    } catch {
+      return
+    }
+    if (!Array.isArray(msg.d)) return
+    const n = Math.min(msg.d.length, 32)
+    for (let i = 0; i < n; i++) modState.artnet.values[i + 1] = msg.d[i] / 255
+  }
+}
+
+export function stopArtnet() {
+  modState.artnet.enabled = false
+  artWs?.close()
+  artWs = null
+  modState.artnet.connected = false
+}
+
 // --- Per-frame application ----------------------------------------------
 
 const smoothed = new Map()
@@ -354,18 +425,70 @@ function sourceValue(m) {
     const v = modState.midi.values[+s.slice(7)]
     return v === undefined ? null : v
   }
+  if (s.startsWith('artnet.ch')) {
+    if (!modState.artnet.connected) return null
+    const v = modState.artnet.values[+s.slice(9)]
+    return v === undefined ? null : v
+  }
   return null
 }
 
+let lastApplyAt = 0
+
 export function applyModulation() {
-  if (modState.audio.enabled) updateAudio()
+  const now = performance.now()
+  const dt = lastApplyAt ? Math.min((now - lastApplyAt) / 1000, 0.1) : 1 / 60
+  lastApplyAt = now
   for (const m of modState.mappings) {
     const v = sourceValue(m)
     if (v == null) continue
-    const alpha = 1 - Math.min(m.smooth ?? 0, 0.98)
+    // Frame-rate-independent exponential smoothing: `smooth` is the per-60Hz
+    // retention factor, so 0.99+ gives multi-second glides at any FPS.
+    const k = Math.pow(Math.min(m.smooth ?? 0, 0.998), dt * 60)
     const prev = smoothed.get(m.id) ?? v
-    const sm = prev + (v - prev) * alpha
+    const sm = v + (prev - v) * k
     smoothed.set(m.id, sm)
     setParam(m.path, m.min + (m.max - m.min) * sm)
+  }
+}
+
+// Quick-start: add sensible default mappings for every enabled input,
+// skipping any target that is already mapped.
+export function autoMap() {
+  const add = (source, path, min, max, smooth = 0.6) => {
+    if (modState.mappings.some((m) => m.path === path)) return
+    const target = MOD_TARGETS.find((t) => t.path === path)
+    if (!target) return
+    modState.mappings.push({
+      id: 'm' + ++nextId + Math.random().toString(36).slice(2, 6),
+      source, path, min, max, smooth,
+    })
+  }
+  if (modState.audio.enabled) {
+    add('audio.bass', 'layers.0.freq', 100, 260, 0.75)
+    add('audio.level', 'zoom', 0.85, 1.5, 0.85)
+    add('audio.treble', 'thickness', 0.4, 0.62, 0.8)
+    add('audio.beat', 'layers.1.rot', 0, 0.25, 0.45)
+  }
+  if (modState.leap.enabled) {
+    add('leap.palmX', 'layers.0.x', -0.5, 0.5, 0.4)
+    add('leap.palmY', 'zoom', 0.6, 1.8, 0.5)
+    add('leap.pinch', 'thickness', 0.2, 0.8, 0.4)
+    add('leap.roll', 'layers.0.rot', -1.2, 1.2, 0.4)
+  }
+  if (modState.midi.enabled) {
+    const ccs = Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b).slice(0, 4)
+    const targets = [
+      ['zoom', 0.25, 4],
+      ['thickness', 0.05, 0.95],
+      ['layers.0.freq', 5, 600],
+      ['layers.0.rot', -Math.PI, Math.PI],
+    ]
+    ccs.forEach((cc, i) => add('midi.cc' + cc, targets[i][0], targets[i][1], targets[i][2], 0.2))
+  }
+  if (modState.artnet.enabled) {
+    add('artnet.ch1', 'zoom', 0.25, 4, 0.2)
+    add('artnet.ch2', 'thickness', 0.05, 0.95, 0.2)
+    add('artnet.ch3', 'layers.0.freq', 5, 600, 0.2)
   }
 }

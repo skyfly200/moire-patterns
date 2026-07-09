@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { tlSnapshot, tlApply } from './timeline.js'
 import { modSnapshot, modApply } from './modulation.js'
+import { slideshow } from './slideshow.js'
 import { DEFAULT_CUSTOM_EXPR, DEFAULT_SHAPE_EXPR, MAX_LAYERS } from './shaders/moire.js'
 
 export { MAX_LAYERS }
@@ -96,7 +97,7 @@ export function defaultSettings() {
       makeLayer(180, -0.3, -0.1, 0),
       makeLayer(190, 0.6, 0, -0.1),
       makeLayer(200, -0.6, 0.05, 0.05),
-    ].slice(0, MAX_LAYERS).map((l, i) => ({ ...l, color: LAYER_COLORS[i] })),
+    ].slice(0, MAX_LAYERS).map((l, i) => ({ ...l, color: LAYER_COLORS[i], alpha: 1 })),
   }
 }
 
@@ -204,7 +205,7 @@ export function applyPreset(preset) {
 const SNAP_KEYS = [
   'aaMode', 'resScale', 'layerCount', 'zoom', 'thickness', 'animate', 'animSpeed',
   'drift', 'colorMode', 'colorA', 'colorB', 'colorC', 'customExpr',
-  'customShapeExpr',
+  'customShapeExpr', 'showFps',
 ]
 
 export function snapshot() {
@@ -218,9 +219,11 @@ export function snapshot() {
     pattern: l.pattern,
     op: l.op,
     color: l.color,
+    alpha: l.alpha ?? 1,
   }))
   s.tl = tlSnapshot()
   s.mods = modSnapshot()
+  s.show = { m: slideshow.mode, i: slideshow.interval, r: slideshow.morphRate }
   return s
 }
 
@@ -242,6 +245,11 @@ export function applySnapshot(s) {
   settings.activeLayer = 0
   tlApply(s.tl)
   modApply(s.mods)
+  if (s.show) {
+    slideshow.mode = s.show.m || 'current'
+    slideshow.interval = Math.min(60, Math.max(2, +s.show.i || 8))
+    slideshow.morphRate = Math.min(60, Math.max(0.5, +s.show.r || 8))
+  }
 }
 
 export function encodeSnapshot(s = snapshot()) {
@@ -273,25 +281,69 @@ export function loadFromHash() {
   }
 }
 
-export function randomize() {
-  const rnd = (min, max) => min + Math.random() * (max - min)
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-  settings.layerCount = 2 + Math.floor(rnd(0, 4))
-  settings.thickness = rnd(0.35, 0.65)
+export function hslToHex(h, s, l) {
+  const a = s * Math.min(l, 1 - l)
+  const f = (n) => {
+    const k = (n + h / 30) % 12
+    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(c * 255).toString(16).padStart(2, '0')
+  }
+  return '#' + f(0) + f(8) + f(4)
+}
+
+// What the main Randomize button (and the R key / on-beat randomize) touches.
+export const randomizeOpts = reactive({
+  patterns: true,
+  ops: true,
+  freqs: true,
+  offsets: true,
+  layerCount: true,
+  thickness: true,
+  colors: true,
+})
+
+const rnd = (min, max) => min + Math.random() * (max - min)
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+export function randomizeColors() {
+  const hue = Math.random() * 360
+  const h2 = (hue + 120 + Math.random() * 120) % 360
+  settings.colorA = hslToHex(hue, 0.5, 0.06)
+  if (settings.colorMode === 3) {
+    settings.layers.forEach((l, i) => {
+      l.color = hslToHex((hue + i * 137.5) % 360, 0.8, 0.6)
+    })
+  } else {
+    settings.colorB = hslToHex(h2, 0.85, 0.62)
+    settings.colorC = hslToHex((h2 + 80) % 360, 0.85, 0.55)
+  }
+}
+
+export function randomizePattern(opts = null) {
+  const o = opts || {
+    patterns: true, ops: true, freqs: true, offsets: true,
+    layerCount: true, thickness: true,
+  }
+  if (o.layerCount) settings.layerCount = 2 + Math.floor(rnd(0, 4))
+  if (o.thickness) settings.thickness = rnd(0.35, 0.65)
   const baseFreq = rnd(60, 400)
   const basePattern = pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
   settings.layers.forEach((l, i) => {
-    l.freq = baseFreq * rnd(0.97, 1.03)
-    l.rot = rnd(-0.15, 0.15) * i
-    l.x = rnd(-0.15, 0.15)
-    l.y = rnd(-0.15, 0.15)
+    if (o.freqs) l.freq = baseFreq * rnd(0.97, 1.03)
+    if (o.offsets) {
+      l.rot = rnd(-0.15, 0.15) * i
+      l.x = rnd(-0.15, 0.15)
+      l.y = rnd(-0.15, 0.15)
+    }
     // Mostly keep layers on one pattern family (classic moiré), sometimes mix.
-    l.pattern = Math.random() < 0.75 ? basePattern : pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
-    l.op = pick([0, 0, 1, 1, 3, 4, 5])
+    if (o.patterns) {
+      l.pattern = Math.random() < 0.75 ? basePattern : pick([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    }
+    if (o.ops) l.op = pick([0, 0, 1, 1, 3, 4, 5])
   })
   // Occasionally drop a mask into the middle of the stack — sometimes a
   // low-frequency grating, sometimes a shape window.
-  if (settings.layerCount >= 3 && Math.random() < 0.4) {
+  if (o.ops && settings.layerCount >= 3 && Math.random() < 0.4) {
     const m = settings.layers[1]
     m.op = 8
     if (Math.random() < 0.5) {
@@ -303,4 +355,9 @@ export function randomize() {
       m.freq = rnd(15, 60)
     }
   }
+}
+
+export function randomize() {
+  randomizePattern(randomizeOpts)
+  if (randomizeOpts.colors) randomizeColors()
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import {
   settings,
   shaderState,
@@ -10,11 +10,10 @@ import {
   COLOR_MODES,
   applyPreset,
   randomize,
-  shareURL,
-  encodeSnapshot,
+  randomizePattern,
+  randomizeColors,
+  randomizeOpts,
 } from '../settings.js'
-import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
-import { recState } from '../recorder.js'
 import KeyBtn from './KeyBtn.vue'
 import { slideshow, SLIDESHOW_MODES } from '../slideshow.js'
 import {
@@ -22,49 +21,31 @@ import {
   BEAT_ACTIONS,
   AUDIO_SOURCES,
   LEAP_SOURCES,
+  ARTNET_SOURCES,
   MOD_TARGETS,
   addMapping,
   removeMapping,
   resetMappingRange,
+  autoMap,
   startAudio,
   stopAudio,
   startMIDI,
   stopMIDI,
   startLeap,
   stopLeap,
+  startArtnet,
+  stopArtnet,
 } from '../modulation.js'
 
-defineEmits(['export', 'record', 'save', 'slideshow'])
+defineEmits(['slideshow'])
 
-const copiedId = ref(null)
-let copiedTimer = null
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    window.prompt('Copy this link:', text)
-  }
+function rotDeg(layer) {
+  return Math.round((layer.rot * 180) / Math.PI)
 }
 
-async function copyShare(entry = null) {
-  const url = entry ? shareURL(entry.snap) : shareURL()
-  if (!entry) history.replaceState(null, '', '#s=' + encodeSnapshot())
-  await copyText(url)
-  copiedId.value = entry ? entry.id : 'current'
-  clearTimeout(copiedTimer)
-  copiedTimer = setTimeout(() => (copiedId.value = null), 1500)
+function setRotDeg(layer, deg) {
+  layer.rot = (Number(deg) * Math.PI) / 180
 }
-
-const recTime = computed(() => {
-  const m = Math.floor(recState.seconds / 60)
-  const s = String(recState.seconds % 60).padStart(2, '0')
-  return `${m}:${s}`
-})
-
-const anyCustom = computed(() =>
-  settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 9),
-)
 
 function toggleAudio(e) {
   e.target.checked ? startAudio() : stopAudio()
@@ -75,25 +56,48 @@ function toggleMIDI(e) {
 function toggleLeap(e) {
   e.target.checked ? startLeap() : stopLeap()
 }
+function toggleArtnet(e) {
+  e.target.checked ? startArtnet() : stopArtnet()
+}
 
-const knownCCs = computed(() => Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b))
+const knownCCs = computed(() =>
+  Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b),
+)
 
 function sourceLabel(source) {
   if (source.startsWith('midi.cc')) return 'MIDI · CC ' + source.slice(7)
   return source
 }
 
+const anyInputEnabled = computed(
+  () =>
+    modState.audio.enabled ||
+    modState.midi.enabled ||
+    modState.leap.enabled ||
+    modState.artnet.enabled,
+)
+
+const anyCustom = computed(() =>
+  settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 9),
+)
+
 const anyCustomShape = computed(() =>
   settings.layers.slice(0, settings.layerCount).some((l) => l.pattern === 15),
 )
 
-function rotDeg(layer) {
-  return Math.round((layer.rot * 180) / Math.PI)
-}
+const isMorphMode = computed(
+  () => slideshow.mode === 'morph' || slideshow.mode === 'shufflemorph',
+)
 
-function setRotDeg(layer, deg) {
-  layer.rot = (Number(deg) * Math.PI) / 180
-}
+const RANDOMIZE_OPTS = [
+  ['patterns', 'patterns'],
+  ['ops', 'combine'],
+  ['freqs', 'freqs'],
+  ['offsets', 'offsets'],
+  ['layerCount', 'layers'],
+  ['thickness', 'width'],
+  ['colors', 'colors'],
+]
 </script>
 
 <template>
@@ -109,7 +113,17 @@ function setRotDeg(layer, deg) {
         <button v-for="p in PRESETS" :key="p.name" @click="applyPreset(p)">
           {{ p.name }}
         </button>
+      </div>
+      <div class="row rand-row">
         <button class="accent" @click="randomize()">Randomize</button>
+        <button title="Randomize the pattern structure only" @click="randomizePattern()">🎲 Pattern</button>
+        <button title="Random colors only" @click="randomizeColors()">🎨 Colors</button>
+      </div>
+      <div class="rand-opts" title="What Randomize (and the R key / on-beat randomize) affects">
+        <label v-for="[key, label] in RANDOMIZE_OPTS" :key="key">
+          <input type="checkbox" v-model="randomizeOpts[key]" />
+          {{ label }}
+        </label>
       </div>
       <div class="row slideshow-row">
         <button
@@ -121,16 +135,21 @@ function setRotDeg(layer, deg) {
         </button>
         <select
           v-model="slideshow.mode"
-          title="Gallery: cycle saved patterns (or presets). Shuffle: jump to random settings. Morph: smoothly fade settings toward random targets. Shuffle + Morph: random pattern picks each cycle with smooth fades between."
+          title="Current: just present the current settings. Gallery: cycle saved patterns (or presets). Shuffle: jump to random settings. Morph: smoothly fade settings toward random targets. Shuffle + Morph: random pattern picks each cycle with smooth fades."
         >
           <option v-for="m in SLIDESHOW_MODES" :key="m.value" :value="m.value">
             {{ m.label }}
           </option>
         </select>
       </div>
-      <div class="row slideshow-row">
+      <div v-if="slideshow.mode !== 'current'" class="row slideshow-row">
         <span class="every">every</span>
         <input type="number" min="2" max="60" step="1" v-model.number="slideshow.interval" />
+        <span>seconds</span>
+      </div>
+      <div v-if="isMorphMode" class="row slideshow-row" title="How long each fade takes (up to the interval; shorter = snappier transitions with a hold)">
+        <span class="every">fade over</span>
+        <input type="number" min="0.5" max="60" step="0.5" v-model.number="slideshow.morphRate" />
         <span>seconds</span>
       </div>
     </section>
@@ -152,7 +171,15 @@ function setRotDeg(layer, deg) {
           <option :value="0">Auto (sharp)</option>
           <option :value="1">100%</option>
           <option :value="0.75">75%</option>
-          <option :value="0.5">50% (fast)</option>
+          <option :value="0.5">50%</option>
+          <option :value="2160">2160 px</option>
+          <option :value="1440">1440 px</option>
+          <option :value="1080">1080 px</option>
+          <option :value="720">720 px</option>
+          <option :value="540">540 px</option>
+          <option :value="480">480 px</option>
+          <option :value="360">360 px</option>
+          <option :value="240">240 px</option>
         </select>
       </label>
       <label class="row">
@@ -268,6 +295,11 @@ function setRotDeg(layer, deg) {
           {{ modState.audio.bpm ? '~' + modState.audio.bpm + ' BPM' : 'listening…' }}
         </em>
       </div>
+      <label v-if="modState.audio.enabled" class="row" title="Higher = more beats detected">
+        <span>Sensitivity</span>
+        <input type="range" min="0.5" max="2" step="0.05" v-model.number="modState.beat.sens" />
+        <b>{{ modState.beat.sens.toFixed(2) }}</b>
+      </label>
       <label v-if="modState.audio.enabled" class="row">
         <span>On beat</span>
         <select v-model="modState.beat.action">
@@ -300,6 +332,12 @@ function setRotDeg(layer, deg) {
         </em>
       </label>
       <p v-if="modState.leap.error" class="err">{{ modState.leap.error }}</p>
+      <label class="row" title="DMX input via the bundled bridge: node tools/artnet-bridge.mjs">
+        <span>Art-Net</span>
+        <input type="checkbox" :checked="modState.artnet.enabled" @change="toggleArtnet" />
+        <em v-if="modState.artnet.connected" class="note">bridge connected</em>
+      </label>
+      <p v-if="modState.artnet.error" class="err">{{ modState.artnet.error }}</p>
 
       <div v-for="m in modState.mappings" :key="m.id" class="map-box">
         <div class="row">
@@ -310,7 +348,7 @@ function setRotDeg(layer, deg) {
               </option>
             </optgroup>
             <optgroup label="MIDI">
-              <option v-if="m.source.startsWith('midi.cc')" :value="m.source">
+              <option v-if="m.source.startsWith('midi.cc') && !knownCCs.includes(+m.source.slice(7))" :value="m.source">
                 {{ sourceLabel(m.source) }}
               </option>
               <option v-for="cc in knownCCs" :key="cc" :value="'midi.cc' + cc">
@@ -319,6 +357,11 @@ function setRotDeg(layer, deg) {
             </optgroup>
             <optgroup label="Leap Motion">
               <option v-for="s in LEAP_SOURCES" :key="s.value" :value="s.value">
+                {{ s.label }}
+              </option>
+            </optgroup>
+            <optgroup label="Art-Net">
+              <option v-for="s in ARTNET_SOURCES" :key="s.value" :value="s.value">
                 {{ s.label }}
               </option>
             </optgroup>
@@ -336,7 +379,7 @@ function setRotDeg(layer, deg) {
           <input type="number" step="any" v-model.number="m.min" />
           <input type="number" step="any" v-model.number="m.max" />
           <span>smooth</span>
-          <input type="range" min="0" max="0.95" step="0.05" v-model.number="m.smooth" />
+          <input type="range" min="0" max="0.995" step="0.005" v-model.number="m.smooth" />
           <button
             v-if="modState.midi.enabled"
             class="learn"
@@ -348,7 +391,16 @@ function setRotDeg(layer, deg) {
           </button>
         </div>
       </div>
-      <button class="wide" @click="addMapping()">+ Add mapping</button>
+      <div class="row rand-row">
+        <button class="wide" @click="addMapping()">+ Add mapping</button>
+        <button
+          class="wide" :disabled="!anyInputEnabled"
+          title="Add sensible default mappings for every enabled input"
+          @click="autoMap()"
+        >
+          ⚡ Auto-map
+        </button>
+      </div>
     </section>
 
     <section v-for="i in settings.layerCount" :key="i">
@@ -417,38 +469,12 @@ function setRotDeg(layer, deg) {
         <b>{{ settings.layers[i - 1].y.toFixed(2) }}</b>
         <KeyBtn :path="`layers.${i - 1}.y`" />
       </label>
-    </section>
-
-    <section>
-      <h2>Capture &amp; Share</h2>
-      <button class="wide" @click="$emit('export')">Export PNG</button>
-      <button class="wide" :class="{ rec: recState.active }" @click="$emit('record')">
-        <template v-if="recState.active">■ Stop recording · {{ recTime }}</template>
-        <template v-else>● Record video (WebM)</template>
-      </button>
-      <button class="wide" @click="copyShare()">
-        {{ copiedId === 'current' ? 'Link copied!' : 'Copy share link' }}
-      </button>
-      <button class="accent wide" @click="$emit('save')">Save to gallery</button>
-    </section>
-
-    <section v-if="gallery.length">
-      <h2>Gallery</h2>
-      <div class="gallery">
-        <div v-for="e in gallery" :key="e.id" class="entry">
-          <img
-            :src="e.thumb"
-            :title="'Load — saved ' + new Date(e.date).toLocaleString()"
-            @click="loadFromGallery(e)"
-          />
-          <div class="entry-actions">
-            <button :title="copiedId === e.id ? 'Copied!' : 'Copy share link'" @click="copyShare(e)">
-              {{ copiedId === e.id ? '✓' : '🔗' }}
-            </button>
-            <button title="Delete" @click="removeFromGallery(e.id)">✕</button>
-          </div>
-        </div>
-      </div>
+      <label class="row" title="Layer opacity: scales this layer's contribution to the composite">
+        <span>Opacity</span>
+        <input type="range" min="0" max="1" step="0.01" v-model.number="settings.layers[i - 1].alpha" />
+        <b>{{ (settings.layers[i - 1].alpha ?? 1).toFixed(2) }}</b>
+        <KeyBtn :path="`layers.${i - 1}.alpha`" />
+      </label>
     </section>
 
     <footer>
@@ -549,6 +575,61 @@ input[type='checkbox'] {
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
+button {
+  padding: 7px 8px;
+  font-size: 12px;
+  color: #d7d7de;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) {
+  background: #23232c;
+  border-color: #3a3a48;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.accent {
+  background: #342e6e;
+  border-color: #4c42a3;
+  color: #e9e6ff;
+}
+button.accent:hover {
+  background: #3e3784;
+}
+button.wide {
+  width: 100%;
+  padding: 9px;
+}
+.rand-row {
+  gap: 6px;
+}
+.rand-row button {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+}
+.rand-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3px 8px;
+}
+.rand-opts label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: #85858f;
+  cursor: pointer;
+}
+.rand-opts input {
+  width: 12px !important;
+  height: 12px !important;
+}
 .slideshow-row {
   font-size: 11.5px;
   color: #9a9aa5;
@@ -563,99 +644,15 @@ input[type='checkbox'] {
   width: 74px;
   flex: none;
 }
-.slideshow-row input {
-  width: 46px;
-  padding: 4px 6px;
+.slideshow-row input[type='number'] {
+  width: 52px;
+  padding: 3px 6px;
   font-size: 12px;
   color: #e4e4e9;
   background: #1a1a21;
   border: 1px solid #2c2c36;
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
-}
-button {
-  padding: 7px 8px;
-  font-size: 12px;
-  color: #d7d7de;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-button:hover {
-  background: #23232c;
-  border-color: #3a3a48;
-}
-button.accent {
-  background: #342e6e;
-  border-color: #4c42a3;
-  color: #e9e6ff;
-}
-button.accent:hover {
-  background: #3e3784;
-}
-button.wide {
-  width: 100%;
-  padding: 9px;
-}
-button.rec {
-  border-color: rgba(255, 92, 92, 0.55);
-  color: #ff8a8a;
-}
-.gallery {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.entry {
-  position: relative;
-  border: 1px solid #2c2c36;
-  border-radius: 7px;
-  overflow: hidden;
-}
-.entry img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  cursor: pointer;
-  transition: opacity 0.12s;
-}
-.entry img:hover {
-  opacity: 0.8;
-}
-.entry-actions {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.entry:hover .entry-actions {
-  opacity: 1;
-}
-.entry-actions button {
-  padding: 2px 6px;
-  font-size: 11px;
-  background: rgba(12, 12, 16, 0.8);
-}
-.layer-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.layer-tab {
-  padding: 4px 10px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-}
-.layer-tab.active {
-  border-color: #7c6cf0;
-  color: #cfc8ff;
 }
 .keybtn {
   flex: none;
@@ -825,6 +822,21 @@ button.rec {
 .learn.active {
   border-color: #ffd166;
   color: #ffd166;
+}
+.layer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.layer-tab {
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+.layer-tab.active {
+  border-color: #7c6cf0;
+  color: #cfc8ff;
 }
 .layer-color {
   width: 26px !important;

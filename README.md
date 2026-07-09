@@ -70,11 +70,19 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
     MIDI learn (Web MIDI API — Chrome/Edge)
   - **Leap Motion**: palm X/Y/Z, pinch, grab, and palm roll via the
     Ultraleap tracking service WebSocket (run the Leap service locally)
-  Mappings travel in share links and gallery saves; input devices
-  re-enable per session.
+  - **Art-Net / DMX**: 16 channels via a bundled WebSocket bridge —
+    `node tools/artnet-bridge.mjs` relays UDP 6454 to the app
+  An **Auto-map** button wires sensible defaults for every enabled input,
+  and higher smoothing values give multi-second glides. Mappings travel in
+  share links, gallery saves, and modes; input devices re-enable per session.
+- **Modes** — save the entire setup (all settings, custom expressions,
+  timeline, input mappings, beat triggers, display config) under a name in
+  a right-side drawer; keys 1–9 load the first nine live. The drawer also
+  hosts capture, share links, and a **QR code** of the current pattern.
 - **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
   resets), `↑`/`↓` animation speed, `,`/`.` jump to previous/next keyframe,
-  `R` randomize, `H` hide UI, `F` fullscreen
+  `R` randomize, `G` save to gallery, `M` save mode, `1`–`9` load modes,
+  `S` display view, `Esc` exit it, `H` hide UI, `F` fullscreen
 
 ## ⚠️ Photosensitivity
 

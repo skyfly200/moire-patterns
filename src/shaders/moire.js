@@ -45,6 +45,7 @@ uniform vec3  uColorA;      // background
 uniform vec3  uColorB;      // foreground
 uniform vec3  uColorC;      // gradient end stop
 uniform vec3  uLayerColor[MAX_LAYERS];
+uniform float uLayerAlpha[MAX_LAYERS];
 uniform vec2  uOffset[MAX_LAYERS];
 uniform float uFreq[MAX_LAYERS];
 uniform float uRot[MAX_LAYERS];
@@ -186,7 +187,7 @@ float composite(vec2 p) {
   bool started = false;
   for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= uLayerCount) break;
-    float c = layerValue(p, i);
+    float c = layerValue(p, i) * uLayerAlpha[i];
     if (uOp[i] == 8 && i > 0) {
       float group = started ? acc : 0.0;
       result = pendingMask >= 0.0 ? mix(result, group, pendingMask) : group;
@@ -221,7 +222,7 @@ vec3 shade(vec2 fragCoord) {
     vec3 col = uColorA;
     for (int i = 0; i < MAX_LAYERS; i++) {
       if (i >= uLayerCount) break;
-      vec3 tinted = uLayerColor[i] * layerValue(p, i);
+      vec3 tinted = uLayerColor[i] * (layerValue(p, i) * uLayerAlpha[i]);
       col = col + tinted - col * tinted;
     }
     return col;
