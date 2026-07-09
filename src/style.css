@@ -18,3 +18,15 @@ body {
   color: #e4e4e9;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Mobile: stop iOS from auto-zooming when a text/number/select field is
+   focused (it does that whenever the control's font is under 16px). Only
+   affects the fields that trigger it, and only on small screens. */
+@media (max-width: 768px) {
+  input[type='number'],
+  input[type='text'],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

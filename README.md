@@ -105,6 +105,14 @@ Two flavors are on display:
    preset with anti-alias set to *Off*, then flip it to *Smooth* or
    *Supersample*).
 
+## Mobile
+
+On phones and narrow screens the canvas goes full-bleed and the control
+panel and share drawer become slide-over sheets, opened from a bottom
+toolbar (Controls · Random · Play · Share · Fullscreen). Pinch to zoom,
+drag to move the active layer. The desktop three-column layout is
+unchanged above 768px.
+
 ## Development
 
 ```bash
