@@ -2,7 +2,17 @@
 import { ref, computed, nextTick } from 'vue'
 import QRCode from 'qrcode'
 import { shareURL, encodeSnapshot } from '../settings.js'
-import { gallery, loadFromGallery, removeFromGallery } from '../gallery.js'
+import {
+  gallery,
+  collections,
+  galleryView,
+  loadFromGallery,
+  removeFromGallery,
+  createCollection,
+  deleteCollection,
+  renameCollection,
+  setEntryCollection,
+} from '../gallery.js'
 import { modes, loadMode, removeMode, renameMode } from '../modes.js'
 import { recState } from '../recorder.js'
 
@@ -54,6 +64,38 @@ function rename(m) {
   const name = window.prompt('Rename mode:', m.name)
   if (name !== null) renameMode(m.id, name)
 }
+
+const filteredGallery = computed(() => {
+  if (galleryView.filter === 'all') return gallery
+  if (galleryView.filter === 'uncat') return gallery.filter((e) => !e.collection)
+  return gallery.filter((e) => e.collection === galleryView.filter)
+})
+
+function newCollection() {
+  const name = window.prompt('New collection name:')
+  if (name && name.trim()) galleryView.filter = createCollection(name)
+}
+
+function onEntryCollection(e, value) {
+  if (value === '__new') {
+    const name = window.prompt('New collection name:')
+    if (name && name.trim()) setEntryCollection(e.id, createCollection(name))
+    return
+  }
+  setEntryCollection(e.id, value)
+}
+
+function editCollection() {
+  const cur = galleryView.filter
+  if (cur === 'all' || cur === 'uncat') return
+  const action = window.prompt(
+    `Collection "${cur}" — type a new name to rename, or "delete" to remove it (entries move to Uncategorized):`,
+    cur,
+  )
+  if (action === null) return
+  if (action.trim().toLowerCase() === 'delete') deleteCollection(cur)
+  else renameCollection(cur, action)
+}
 </script>
 
 <template>
@@ -101,9 +143,30 @@ function rename(m) {
     </section>
 
     <section v-if="gallery.length">
-      <h2>Gallery</h2>
-      <div class="gallery">
-        <div v-for="e in gallery" :key="e.id" class="entry">
+      <div class="gallery-head">
+        <h2>Gallery</h2>
+        <button
+          v-if="galleryView.filter !== 'all' && galleryView.filter !== 'uncat'"
+          class="col-edit" title="Rename or delete this collection"
+          @click="editCollection()"
+        >⚙</button>
+      </div>
+      <div class="col-tabs">
+        <button :class="{ active: galleryView.filter === 'all' }" @click="galleryView.filter = 'all'">
+          All
+        </button>
+        <button
+          v-for="c in collections" :key="c"
+          :class="{ active: galleryView.filter === c }"
+          @click="galleryView.filter = c"
+        >{{ c }}</button>
+        <button :class="{ active: galleryView.filter === 'uncat' }" @click="galleryView.filter = 'uncat'">
+          Uncategorized
+        </button>
+        <button class="col-new" title="New collection" @click="newCollection()">＋</button>
+      </div>
+      <div v-if="filteredGallery.length" class="gallery">
+        <div v-for="e in filteredGallery" :key="e.id" class="entry">
           <img
             :src="e.thumb"
             :title="'Load — saved ' + new Date(e.date).toLocaleString()"
@@ -115,8 +178,18 @@ function rename(m) {
             </button>
             <button title="Delete" @click="removeFromGallery(e.id)">✕</button>
           </div>
+          <select
+            class="entry-col" title="Collection"
+            :value="e.collection || ''"
+            @change="onEntryCollection(e, $event.target.value)"
+          >
+            <option value="">Uncategorized</option>
+            <option v-for="c in collections" :key="c" :value="c">{{ c }}</option>
+            <option value="__new">+ New…</option>
+          </select>
         </div>
       </div>
+      <p v-else class="note">Nothing in this collection yet.</p>
     </section>
 
     <p v-if="!gallery.length && !modes.length" class="note empty">
@@ -245,6 +318,39 @@ button.rec {
   padding: 2px 6px;
   font-size: 11px;
 }
+.gallery-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gallery-head h2 {
+  flex: 1;
+}
+.col-edit {
+  padding: 2px 7px;
+  font-size: 12px;
+}
+.col-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.col-tabs button {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  color: #9a9aa5;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 999px;
+}
+.col-tabs button.active {
+  color: #cfc8ff;
+  border-color: #7c6cf0;
+  background: #241f45;
+}
+.col-tabs .col-new {
+  color: #8f86d8;
+}
 .gallery {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -255,6 +361,17 @@ button.rec {
   border: 1px solid #2c2c36;
   border-radius: 7px;
   overflow: hidden;
+}
+.entry-col {
+  display: block;
+  width: 100%;
+  padding: 2px 4px;
+  font-size: 10px;
+  color: #b6b6c0;
+  background: #16161c;
+  border: none;
+  border-top: 1px solid #24242d;
+  cursor: pointer;
 }
 .entry img {
   display: block;

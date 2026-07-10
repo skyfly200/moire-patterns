@@ -169,8 +169,8 @@ export function startSlideshow() {
     advance()
     timer = setInterval(advance, slideshow.interval * 1000)
   } else if (slideshow.mode === 'shuffle') {
-    randomize()
-    timer = setInterval(randomize, slideshow.interval * 1000)
+    randomize(false)
+    timer = setInterval(() => randomize(false), slideshow.interval * 1000)
   } else {
     nextMorphCycle(performance.now())
     rafId = requestAnimationFrame(morphTick)
@@ -192,7 +192,7 @@ watch(
     if (!timer) return
     clearInterval(timer)
     timer = setInterval(
-      slideshow.mode === 'gallery' ? advance : randomize,
+      slideshow.mode === 'gallery' ? advance : () => randomize(false),
       slideshow.interval * 1000,
     )
   },

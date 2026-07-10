@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { setParam, trackLabel } from './timeline.js'
+import { setParam, getParam, trackLabel } from './timeline.js'
 import { MAX_LAYERS } from './shaders/moire.js'
 import { settings, randomize, randomizeColors } from './settings.js'
 import { nextSlide } from './slideshow.js'
@@ -73,14 +73,38 @@ let nextId = 0
 // input glides out of the box.
 export const DEFAULT_SMOOTH = 0.85
 
+// A modulation band centered on the target's current value, `frac` of its
+// full range wide, shifted to stay inside the target's absolute bounds. This
+// keeps mapped input wiggling *around* the pattern you have now (e.g. just
+// after a randomize) instead of sweeping the whole extreme range.
+export function bandAround(path, frac = 0.4) {
+  const t = MOD_TARGETS.find((x) => x.path === path)
+  if (!t) return [0, 1]
+  const cur = Math.min(t.max, Math.max(t.min, getParam(path)))
+  const span = (t.max - t.min) * frac
+  let min = cur - span / 2
+  let max = cur + span / 2
+  if (min < t.min) {
+    max = Math.min(t.max, max + (t.min - min))
+    min = t.min
+  }
+  if (max > t.max) {
+    min = Math.max(t.min, min - (max - t.max))
+    max = t.max
+  }
+  const round = /\.freq$/.test(path) ? (v) => Math.round(v) : (v) => +v.toFixed(3)
+  return [round(min), round(max)]
+}
+
 export function addMapping(source = 'audio.level') {
   const target = MOD_TARGETS[0]
+  const [min, max] = bandAround(target.path, 0.4)
   modState.mappings.push({
     id: 'm' + ++nextId + Math.random().toString(36).slice(2, 6),
     source,
     path: target.path,
-    min: target.min,
-    max: target.max,
+    min,
+    max,
     smooth: DEFAULT_SMOOTH,
   })
 }
@@ -92,11 +116,10 @@ export function removeMapping(id) {
 }
 
 export function resetMappingRange(m) {
-  const r = MOD_TARGETS.find((t) => t.path === m.path)
-  if (r) {
-    m.min = r.min
-    m.max = r.max
-  }
+  // Center the new target's range on its current value.
+  const [min, max] = bandAround(m.path, 0.4)
+  m.min = min
+  m.max = max
 }
 
 export function modSnapshot() {
@@ -184,8 +207,9 @@ function fireBeatAction() {
   modState.beat.count++
   if (modState.beat.action === 'none') return
   if (modState.beat.count % Math.max(1, modState.beat.every) !== 0) return
-  if (modState.beat.action === 'randomize') randomize()
-  else if (modState.beat.action === 'colors') randomizeColors()
+  // Don't flood the undo history with automated (on-beat) randomizes.
+  if (modState.beat.action === 'randomize') randomize(false)
+  else if (modState.beat.action === 'colors') randomizeColors(false)
   else if (modState.beat.action === 'slide') nextSlide()
 }
 
@@ -462,41 +486,41 @@ export function applyModulation() {
 // easing, and inherently steppy sources (Leap hand tracking, 7-bit MIDI,
 // 8-bit DMX) get heavier smoothing to iron out their quantization.
 export function autoMap() {
-  const add = (source, path, min, max, smooth = DEFAULT_SMOOTH) => {
+  // Each mapping's range is a band centered on the target's *current* value
+  // (see bandAround), so auto-mapping right after a randomize makes the input
+  // modulate around the pattern you just landed on. `frac` sets how wide.
+  const add = (source, path, smooth, frac) => {
     if (modState.mappings.some((m) => m.path === path)) return
-    const target = MOD_TARGETS.find((t) => t.path === path)
-    if (!target) return
+    if (!MOD_TARGETS.some((t) => t.path === path)) return
+    const [min, max] = bandAround(path, frac)
     modState.mappings.push({
       id: 'm' + ++nextId + Math.random().toString(36).slice(2, 6),
       source, path, min, max, smooth,
     })
   }
   if (modState.audio.enabled) {
-    add('audio.bass', 'layers.0.freq', 100, 260, 0.9)
-    add('audio.level', 'zoom', 0.85, 1.5, 0.93)
-    add('audio.treble', 'thickness', 0.4, 0.62, 0.9)
-    // Beat pulse still needs to read as a hit, so ease it less than the rest.
-    add('audio.beat', 'layers.1.rot', 0, 0.25, 0.72)
+    add('audio.bass', 'layers.0.freq', 0.9, 0.5)
+    add('audio.level', 'zoom', 0.93, 0.5)
+    add('audio.treble', 'thickness', 0.9, 0.5)
+    // Beat pulse still needs to read as a hit, so ease it less and swing wider.
+    add('audio.beat', 'layers.1.rot', 0.72, 0.35)
   }
   if (modState.leap.enabled) {
-    add('leap.palmX', 'layers.0.x', -0.5, 0.5, 0.85)
-    add('leap.palmY', 'zoom', 0.6, 1.8, 0.85)
-    add('leap.pinch', 'thickness', 0.2, 0.8, 0.8)
-    add('leap.roll', 'layers.0.rot', -1.2, 1.2, 0.85)
+    // A hand covers a lot of ground — give it wide bands around the current pose.
+    add('leap.palmX', 'layers.0.x', 0.85, 0.7)
+    add('leap.palmY', 'zoom', 0.85, 0.7)
+    add('leap.pinch', 'thickness', 0.8, 0.7)
+    add('leap.roll', 'layers.0.rot', 0.85, 0.7)
   }
   if (modState.midi.enabled) {
     const ccs = Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b).slice(0, 4)
-    const targets = [
-      ['zoom', 0.25, 4],
-      ['thickness', 0.05, 0.95],
-      ['layers.0.freq', 5, 600],
-      ['layers.0.rot', -Math.PI, Math.PI],
-    ]
-    ccs.forEach((cc, i) => add('midi.cc' + cc, targets[i][0], targets[i][1], targets[i][2], 0.6))
+    const paths = ['zoom', 'thickness', 'layers.0.freq', 'layers.0.rot']
+    // A knob's full sweep should span a generously wide band around current.
+    ccs.forEach((cc, i) => add('midi.cc' + cc, paths[i], 0.6, 0.8))
   }
   if (modState.artnet.enabled) {
-    add('artnet.ch1', 'zoom', 0.25, 4, 0.6)
-    add('artnet.ch2', 'thickness', 0.05, 0.95, 0.6)
-    add('artnet.ch3', 'layers.0.freq', 5, 600, 0.6)
+    add('artnet.ch1', 'zoom', 0.6, 0.8)
+    add('artnet.ch2', 'thickness', 0.6, 0.8)
+    add('artnet.ch3', 'layers.0.freq', 0.6, 0.8)
   }
 }

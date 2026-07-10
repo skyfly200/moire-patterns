@@ -79,10 +79,16 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   timeline, input mappings, beat triggers, display config) under a name in
   a right-side drawer; keys 1–9 load the first nine live. The drawer also
   hosts capture, share links, and a **QR code** of the current pattern.
+- **Gallery collections** — organize saved patterns into named collections,
+  filter the gallery by collection tab, and reassign entries from each tile.
+- **Randomize history** — `↶`/`↷` buttons (and `Z` / `Shift+Z`) step back and
+  forward through randomizes, so a great pattern skipped by accident is
+  recoverable.
 - **Keyboard shortcuts** — `Space`/`A` play/pause (pauses in place, never
   resets), `↑`/`↓` animation speed, `,`/`.` jump to previous/next keyframe,
-  `R` randomize, `G` save to gallery, `M` save mode, `1`–`9` load modes,
-  `S` display view, `Esc` exit it, `H` hide UI, `F` fullscreen
+  `R` randomize, `Z`/`Shift+Z` randomize back/forward, `G` save to gallery,
+  `M` save mode, `1`–`9` load modes, `S` display view, `Esc` exit it,
+  `H` hide UI, `F` fullscreen
 
 ## ⚠️ Photosensitivity
 

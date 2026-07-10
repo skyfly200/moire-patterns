@@ -305,7 +305,31 @@ export const randomizeOpts = reactive({
 const rnd = (min, max) => min + Math.random() * (max - min)
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
-export function randomizeColors() {
+// Undo/redo history for randomize, so a cool pattern skipped by accident can
+// be recovered. Each manual randomize records the pre-change snapshot.
+export const history = reactive({ past: [], future: [] })
+const HISTORY_MAX = 80
+
+function pushHistory() {
+  history.past.push(snapshot())
+  if (history.past.length > HISTORY_MAX) history.past.shift()
+  history.future.length = 0
+}
+
+export function undoRandomize() {
+  if (!history.past.length) return
+  history.future.push(snapshot())
+  applySnapshot(history.past.pop())
+}
+
+export function redoRandomize() {
+  if (!history.future.length) return
+  history.past.push(snapshot())
+  applySnapshot(history.future.pop())
+}
+
+export function randomizeColors(record = true) {
+  if (record) pushHistory()
   const hue = Math.random() * 360
   const h2 = (hue + 120 + Math.random() * 120) % 360
   settings.colorA = hslToHex(hue, 0.5, 0.06)
@@ -319,7 +343,8 @@ export function randomizeColors() {
   }
 }
 
-export function randomizePattern(opts = null) {
+export function randomizePattern(opts = null, record = true) {
+  if (record) pushHistory()
   const o = opts || {
     patterns: true, ops: true, freqs: true, offsets: true,
     layerCount: true, thickness: true,
@@ -357,7 +382,8 @@ export function randomizePattern(opts = null) {
   }
 }
 
-export function randomize() {
-  randomizePattern(randomizeOpts)
-  if (randomizeOpts.colors) randomizeColors()
+export function randomize(record = true) {
+  if (record) pushHistory()
+  randomizePattern(randomizeOpts, false)
+  if (randomizeOpts.colors) randomizeColors(false)
 }
