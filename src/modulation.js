@@ -69,6 +69,10 @@ export const modState = reactive({
 
 let nextId = 0
 
+// Default smoothing for a freshly added mapping — high enough that live
+// input glides out of the box.
+export const DEFAULT_SMOOTH = 0.85
+
 export function addMapping(source = 'audio.level') {
   const target = MOD_TARGETS[0]
   modState.mappings.push({
@@ -77,7 +81,7 @@ export function addMapping(source = 'audio.level') {
     path: target.path,
     min: target.min,
     max: target.max,
-    smooth: 0.6,
+    smooth: DEFAULT_SMOOTH,
   })
 }
 
@@ -453,9 +457,12 @@ export function applyModulation() {
 }
 
 // Quick-start: add sensible default mappings for every enabled input,
-// skipping any target that is already mapped.
+// skipping any target that is already mapped. Smoothing defaults are high so
+// live input glides rather than jitters — continuous controllers get gentle
+// easing, and inherently steppy sources (Leap hand tracking, 7-bit MIDI,
+// 8-bit DMX) get heavier smoothing to iron out their quantization.
 export function autoMap() {
-  const add = (source, path, min, max, smooth = 0.6) => {
+  const add = (source, path, min, max, smooth = DEFAULT_SMOOTH) => {
     if (modState.mappings.some((m) => m.path === path)) return
     const target = MOD_TARGETS.find((t) => t.path === path)
     if (!target) return
@@ -465,16 +472,17 @@ export function autoMap() {
     })
   }
   if (modState.audio.enabled) {
-    add('audio.bass', 'layers.0.freq', 100, 260, 0.75)
-    add('audio.level', 'zoom', 0.85, 1.5, 0.85)
-    add('audio.treble', 'thickness', 0.4, 0.62, 0.8)
-    add('audio.beat', 'layers.1.rot', 0, 0.25, 0.45)
+    add('audio.bass', 'layers.0.freq', 100, 260, 0.9)
+    add('audio.level', 'zoom', 0.85, 1.5, 0.93)
+    add('audio.treble', 'thickness', 0.4, 0.62, 0.9)
+    // Beat pulse still needs to read as a hit, so ease it less than the rest.
+    add('audio.beat', 'layers.1.rot', 0, 0.25, 0.72)
   }
   if (modState.leap.enabled) {
-    add('leap.palmX', 'layers.0.x', -0.5, 0.5, 0.4)
-    add('leap.palmY', 'zoom', 0.6, 1.8, 0.5)
-    add('leap.pinch', 'thickness', 0.2, 0.8, 0.4)
-    add('leap.roll', 'layers.0.rot', -1.2, 1.2, 0.4)
+    add('leap.palmX', 'layers.0.x', -0.5, 0.5, 0.85)
+    add('leap.palmY', 'zoom', 0.6, 1.8, 0.85)
+    add('leap.pinch', 'thickness', 0.2, 0.8, 0.8)
+    add('leap.roll', 'layers.0.rot', -1.2, 1.2, 0.85)
   }
   if (modState.midi.enabled) {
     const ccs = Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b).slice(0, 4)
@@ -484,11 +492,11 @@ export function autoMap() {
       ['layers.0.freq', 5, 600],
       ['layers.0.rot', -Math.PI, Math.PI],
     ]
-    ccs.forEach((cc, i) => add('midi.cc' + cc, targets[i][0], targets[i][1], targets[i][2], 0.2))
+    ccs.forEach((cc, i) => add('midi.cc' + cc, targets[i][0], targets[i][1], targets[i][2], 0.6))
   }
   if (modState.artnet.enabled) {
-    add('artnet.ch1', 'zoom', 0.25, 4, 0.2)
-    add('artnet.ch2', 'thickness', 0.05, 0.95, 0.2)
-    add('artnet.ch3', 'layers.0.freq', 5, 600, 0.2)
+    add('artnet.ch1', 'zoom', 0.25, 4, 0.6)
+    add('artnet.ch2', 'thickness', 0.05, 0.95, 0.6)
+    add('artnet.ch3', 'layers.0.freq', 5, 600, 0.6)
   }
 }
