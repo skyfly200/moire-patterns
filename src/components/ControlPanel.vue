@@ -13,6 +13,9 @@ import {
   randomizePattern,
   randomizeColors,
   randomizeOpts,
+  history,
+  undoRandomize,
+  redoRandomize,
 } from '../settings.js'
 import KeyBtn from './KeyBtn.vue'
 import { slideshow, SLIDESHOW_MODES } from '../slideshow.js'
@@ -115,7 +118,19 @@ const RANDOMIZE_OPTS = [
         </button>
       </div>
       <div class="row rand-row">
+        <button
+          class="hist-btn" :disabled="!history.past.length"
+          title="Go back to the pattern before the last randomize (Z)"
+          @click="undoRandomize()"
+        >↶</button>
         <button class="accent" @click="randomize()">Randomize</button>
+        <button
+          class="hist-btn" :disabled="!history.future.length"
+          title="Redo (Shift+Z)"
+          @click="redoRandomize()"
+        >↷</button>
+      </div>
+      <div class="row rand-row">
         <button title="Randomize the pattern structure only" @click="randomizePattern()">🎲 Pattern</button>
         <button title="Random colors only" @click="randomizeColors()">🎨 Colors</button>
       </div>
@@ -612,6 +627,12 @@ button.wide {
   flex: 1;
   min-width: 0;
   padding: 7px 4px;
+}
+.rand-row .hist-btn {
+  flex: none;
+  width: 36px;
+  font-size: 15px;
+  line-height: 1;
 }
 .rand-opts {
   display: grid;

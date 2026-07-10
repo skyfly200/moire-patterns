@@ -4,7 +4,7 @@ import MoireCanvas from './components/MoireCanvas.vue'
 import ControlPanel from './components/ControlPanel.vue'
 import ShareDrawer from './components/ShareDrawer.vue'
 import TimelineBar from './components/TimelineBar.vue'
-import { settings, loadFromHash, randomize } from './settings.js'
+import { settings, loadFromHash, randomize, undoRandomize, redoRandomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 import { modes, saveMode, loadMode } from './modes.js'
 import { jumpToKey } from './timeline.js'
@@ -76,6 +76,7 @@ function onKey(e) {
     if (slideshow.active) toggleSlideshow()
   }
   else if (key === 'r') randomize()
+  else if (key === 'z') e.shiftKey ? redoRandomize() : undoRandomize()
   else if (key === 'g') saveCurrent()
   else if (key === 'm') saveCurrentMode()
   else if (key >= '1' && key <= '9') {
