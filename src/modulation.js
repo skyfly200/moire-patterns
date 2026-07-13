@@ -327,19 +327,41 @@ export function stopMIDI() {
 }
 
 // --- Leap Motion (Ultraleap tracking service WebSocket) -----------------
+//
+// Note: only the older tracking software exposes this WebSocket API (port
+// 6437) — Leap Motion / Orion up to 4.x. Ultraleap Gemini (5.x) removed it
+// entirely, so with Gemini installed nothing listens on the port and the
+// connection can never succeed. The error text below spells this out, and
+// while enabled we retry every few seconds so starting the service (or
+// flipping "Allow Web Apps") connects without re-toggling.
 
 let leapWs = null
+let leapRetryTimer = null
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v))
 
-export function startLeap() {
-  modState.leap.enabled = true
-  modState.leap.error = ''
+const LEAP_HELP =
+  'Leap service not reachable on ws://127.0.0.1:6437. Check: (1) the ' +
+  'tracking service is running (hands visible in the Visualizer); (2) your ' +
+  'software includes the WebSocket API — Leap Motion/Orion 4.x does, but ' +
+  'Ultraleap Gemini 5.x removed it, so install Orion 4.1 for browser use; ' +
+  '(3) "Allow Web Apps" is enabled in the Leap Motion Control Panel; ' +
+  '(4) on an https:// page Firefox blocks localhost sockets — use ' +
+  'Chrome/Edge or run the app locally. Retrying…'
+
+function scheduleLeapRetry() {
+  clearTimeout(leapRetryTimer)
+  if (!modState.leap.enabled) return
+  leapRetryTimer = setTimeout(connectLeap, 3000)
+}
+
+function connectLeap() {
+  if (!modState.leap.enabled) return
   try {
     leapWs = new WebSocket('ws://127.0.0.1:6437/v6.json')
   } catch (e) {
     modState.leap.error = 'Could not open Leap WebSocket: ' + (e.message || e.name)
-    modState.leap.enabled = false
+    scheduleLeapRetry()
     return
   }
   leapWs.onopen = () => {
@@ -349,12 +371,16 @@ export function startLeap() {
     leapWs.send(JSON.stringify({ background: true }))
   }
   leapWs.onerror = () => {
-    modState.leap.error =
-      'Leap service not reachable — is the Ultraleap/Leap Motion tracking service running?'
+    modState.leap.error = LEAP_HELP
   }
   leapWs.onclose = () => {
+    const wasConnected = modState.leap.connected
     modState.leap.connected = false
     modState.leap.hands = 0
+    if (wasConnected && modState.leap.enabled) {
+      modState.leap.error = 'Leap connection lost — retrying…'
+    }
+    scheduleLeapRetry()
   }
   leapWs.onmessage = (ev) => {
     let msg
@@ -379,8 +405,16 @@ export function startLeap() {
   }
 }
 
+export function startLeap() {
+  modState.leap.enabled = true
+  modState.leap.error = ''
+  connectLeap()
+}
+
 export function stopLeap() {
   modState.leap.enabled = false
+  clearTimeout(leapRetryTimer)
+  leapRetryTimer = null
   leapWs?.close()
   leapWs = null
   modState.leap.connected = false
