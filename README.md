@@ -69,7 +69,12 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
   - **MIDI**: any CC from a connected controller, with click-and-twist
     MIDI learn (Web MIDI API — Chrome/Edge)
   - **Leap Motion**: palm X/Y/Z, pinch, grab, and palm roll via the
-    Ultraleap tracking service WebSocket (run the Leap service locally)
+    tracking service WebSocket on port 6437. **Requires Leap Motion /
+    Orion 4.x software** — Ultraleap Gemini (5.x) removed the WebSocket
+    API, so browsers cannot talk to it; install Orion 4.1 and enable
+    "Allow Web Apps" in the control panel. On an https:// deployment use
+    Chrome/Edge (Firefox blocks localhost sockets from secure pages).
+    The app auto-retries every 3 s while the toggle is on.
   - **Art-Net / DMX**: 16 channels via a bundled WebSocket bridge —
     `node tools/artnet-bridge.mjs` relays UDP 6454 to the app
   An **Auto-map** button wires sensible defaults for every enabled input,
