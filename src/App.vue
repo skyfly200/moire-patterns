@@ -4,6 +4,7 @@ import MoireCanvas from './components/MoireCanvas.vue'
 import ControlPanel from './components/ControlPanel.vue'
 import ShareDrawer from './components/ShareDrawer.vue'
 import TimelineBar from './components/TimelineBar.vue'
+import InputSetup from './components/InputSetup.vue'
 import { settings, loadFromHash, randomize, undoRandomize, redoRandomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 import { modes, saveMode, loadMode } from './modes.js'
@@ -12,6 +13,7 @@ import { slideshow, startSlideshow, stopSlideshow } from './slideshow.js'
 
 const canvasRef = ref(null)
 const panelVisible = ref(true)
+const setupPopup = ref('') // '' | 'midi' | 'artnet'
 
 // Mobile only: which slide-over panel is open ('', 'controls', 'share') and
 // whether the timeline sheet is up. Ignored on desktop, where both panels
@@ -65,9 +67,19 @@ function toggleFullscreen() {
   else document.documentElement.requestFullscreen()
 }
 
+function isEditable(el) {
+  return el && (el.closest('input, select, textarea') || el.isContentEditable)
+}
+
 function onKey(e) {
   if (showWarning.value) return
-  if (e.target.closest('input, select, textarea')) return
+  // Guard against Backspace navigating the browser back (and unmounting the
+  // SPA) when focus isn't in a text field — e.g. an empty/blurred control.
+  if (e.key === 'Backspace' && !isEditable(e.target)) {
+    e.preventDefault()
+    return
+  }
+  if (isEditable(e.target)) return
   const key = e.key.toLowerCase()
   if (key === 'h') panelVisible.value = !panelVisible.value
   else if (key === 'f') toggleFullscreen()
@@ -112,6 +124,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <ControlPanel
         v-show="panelVisible"
         @slideshow="toggleSlideshow"
+        @setup="setupPopup = $event"
       />
       <MoireCanvas ref="canvasRef" />
       <ShareDrawer
@@ -151,6 +164,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </button>
       <button @click="toggleFullscreen">⛶<small>Full</small></button>
     </nav>
+    <InputSetup v-if="setupPopup" :which="setupPopup" @close="setupPopup = ''" />
     <div v-if="showWarning" class="warn-backdrop">
       <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
         <h2 id="warn-title">⚠️ Seizure warning — photosensitive epilepsy</h2>

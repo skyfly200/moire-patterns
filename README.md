@@ -77,9 +77,15 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
     The app auto-retries every 3 s while the toggle is on.
   - **Art-Net / DMX**: 16 channels via a bundled WebSocket bridge —
     `node tools/artnet-bridge.mjs` relays UDP 6454 to the app
-  An **Auto-map** button wires sensible defaults for every enabled input,
-  and higher smoothing values give multi-second glides. Mappings travel in
-  share links, gallery saves, and modes; input devices re-enable per session.
+  Leap tracks **both hands** (any-hand plus per-hand left/right sources).
+  An **Auto-map** button wires sensible defaults for every enabled input
+  (Leap → Y:zoom, X/Z:layer-2 offset, grab:line width, roll:layer-2
+  rotation), with ranges centered on the current pattern. Mappings are
+  **modular** — a mapping's target can be another mapping's range min/max or
+  smoothing, patch-bay style. Each is a card you can duplicate and drag to
+  reorder. Mappings travel in share links, gallery saves, and modes; input
+  devices re-enable per session. MIDI and Art-Net have **setup dialogs** for
+  device discovery and the DMX bridge.
 - **Modes** — save the entire setup (all settings, custom expressions,
   timeline, input mappings, beat triggers, display config) under a name in
   a right-side drawer; keys 1–9 load the first nine live. The drawer also
