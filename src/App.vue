@@ -119,6 +119,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
+  <v-app theme="moireDark">
   <div class="app" :class="[{ clean: !panelVisible }, mobilePanel ? 'm-open m-' + mobilePanel : '', mobileTimeline ? 'm-timeline' : '']">
     <div class="main">
       <ControlPanel
@@ -192,6 +193,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </div>
     </div>
   </div>
+  </v-app>
 </template>
 
 <style scoped>
