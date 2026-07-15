@@ -1,5 +1,5 @@
 <script setup>
-import { modState, rescanMIDI } from '../modulation.js'
+import { modState, rescanMIDI, MIDI_PROFILES, applyMidiProfile } from '../modulation.js'
 
 const props = defineProps({ which: { type: String, required: true } }) // 'midi' | 'artnet'
 defineEmits(['close'])
@@ -36,6 +36,18 @@ defineEmits(['close'])
           <li>Plug the device in <b>before</b> or after — hot-plug is detected. If not, hit Rescan.</li>
           <li>Move a knob to confirm data arrives (the last CC lights the mapping's Learn).</li>
         </ul>
+        <div class="profiles">
+          <span class="plabel">Controller profile</span>
+          <p class="pnote">
+            Loads a ready-made control map. Every binding is still
+            MIDI-learnable in the panel if your controller differs.
+          </p>
+          <button
+            v-for="p in MIDI_PROFILES" :key="p.value"
+            class="profile-btn"
+            @click="applyMidiProfile(p.value)"
+          >Load {{ p.label }}</button>
+        </div>
         <div class="actions">
           <button class="accent" @click="rescanMIDI()">Rescan devices</button>
         </div>
@@ -199,6 +211,41 @@ code {
   line-height: 1.5;
   color: #ff8a8a;
   margin-bottom: 10px;
+}
+.profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 14px;
+  padding: 12px;
+  background: #16161c;
+  border: 1px solid #24242d;
+  border-radius: 8px;
+}
+.plabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8f86d8;
+}
+.pnote {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #85858f;
+}
+.profile-btn {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: #d7d7de;
+  background: #1a1a21;
+  border: 1px solid #2c2c36;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.profile-btn:hover {
+  background: #23232c;
+  border-color: #3a3a48;
 }
 .actions {
   display: flex;
