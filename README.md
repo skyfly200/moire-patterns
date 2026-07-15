@@ -66,8 +66,12 @@ artifacts on [r/GraphicsProgramming](https://www.reddit.com/r/GraphicsProgrammin
     (Web Audio API), **beat detection** with a live BPM readout, a
     mappable beat-pulse source, and on-beat triggers (randomize the
     pattern, shuffle colors, or advance the display slide every Nth beat)
-  - **MIDI**: any CC from a connected controller, with click-and-twist
-    MIDI learn (Web MIDI API — Chrome/Edge)
+  - **MIDI** (its own control-surface system, separate from the continuous
+    audio/Leap modulation): a CC or note can drive **any** control — a
+    continuous param, a discrete option select, a toggle, or a one-shot
+    action (randomize, play/pause, next preset, undo/redo…). Click-and-twist
+    MIDI learn per binding, and a **KORG nanoKONTROL Studio** profile that
+    maps faders/knobs/transport out of the box (Web MIDI — Chrome/Edge)
   - **Leap Motion**: palm X/Y/Z, pinch, grab, and palm roll via the
     tracking service WebSocket on port 6437. **Requires Leap Motion /
     Orion 4.x software** — Ultraleap Gemini (5.x) removed the WebSocket

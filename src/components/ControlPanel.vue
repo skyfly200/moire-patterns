@@ -26,6 +26,11 @@ import {
   LEAP_SOURCE_GROUPS,
   ARTNET_SOURCES,
   MOD_TARGETS,
+  MIDI_CONTINUOUS,
+  MIDI_DISCRETE,
+  MIDI_TOGGLES,
+  MIDI_ACTIONS,
+  MIDI_PROFILES,
   addMapping,
   duplicateMapping,
   removeMapping,
@@ -33,6 +38,11 @@ import {
   resetMappingRange,
   autoMap,
   isModRoute,
+  addMidiBinding,
+  removeMidiBinding,
+  resetMidiBindingRange,
+  midiTriggerLabel,
+  applyMidiProfile,
   startAudio,
   stopAudio,
   startMIDI,
@@ -86,9 +96,11 @@ function toggleArtnet(e) {
   e.target.checked ? startArtnet() : stopArtnet()
 }
 
-const knownCCs = computed(() =>
-  Object.keys(modState.midi.values).map(Number).sort((a, b) => a - b),
-)
+const midiContinuous = MIDI_CONTINUOUS()
+
+function midiTargetIsParam(b) {
+  return b.target.startsWith('param:')
+}
 
 const anyInputEnabled = computed(
   () =>
@@ -430,17 +442,14 @@ function onDrop(i) {
               <optgroup label="Audio">
                 <option v-for="s in AUDIO_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
               </optgroup>
-              <optgroup label="MIDI">
-                <option v-if="m.source.startsWith('midi.cc') && !knownCCs.includes(+m.source.slice(7))" :value="m.source">
-                  MIDI · CC {{ m.source.slice(7) }}
-                </option>
-                <option v-for="cc in knownCCs" :key="cc" :value="'midi.cc' + cc">MIDI · CC {{ cc }}</option>
-              </optgroup>
               <optgroup v-for="g in LEAP_SOURCE_GROUPS" :key="g.label" :label="g.label">
                 <option v-for="s in g.items" :key="s.value" :value="s.value">{{ s.label }}</option>
               </optgroup>
               <optgroup label="Art-Net">
                 <option v-for="s in ARTNET_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
+              </optgroup>
+              <optgroup v-if="m.source.startsWith('midi.')" label="MIDI (legacy)">
+                <option :value="m.source">MIDI · {{ m.source.replace('midi.cc', 'CC ') }}</option>
               </optgroup>
             </select>
           </label>
@@ -463,12 +472,6 @@ function onDrop(i) {
           <div class="map-line">
             <span>Smooth</span>
             <input type="range" min="0" max="0.995" step="0.005" v-model.number="m.smooth" />
-            <button
-              v-if="modState.midi.enabled"
-              class="learn" :class="{ active: modState.learnId === m.id }"
-              title="Click, then move a knob/fader on your MIDI controller"
-              @click="modState.learnId = modState.learnId === m.id ? null : m.id"
-            >{{ modState.learnId === m.id ? 'move…' : 'learn' }}</button>
           </div>
         </div>
 
@@ -479,6 +482,54 @@ function onDrop(i) {
             title="Add sensible default mappings for every enabled input"
             @click="autoMap()"
           >⚡ Auto-map</button>
+        </div>
+
+        <!-- MIDI control surface: separate from audio/leap modulation, can
+             drive any control (continuous, discrete, toggle, or action). -->
+        <div v-if="modState.midi.enabled || modState.midi.bindings.length" class="midi-block">
+          <div class="midi-title">
+            <span class="box-label">MIDI Control</span>
+            <select
+              class="profile-sel"
+              :value="modState.midi.profile"
+              title="Load a controller profile"
+              @change="applyMidiProfile($event.target.value)"
+            >
+              <option value="">Profile…</option>
+              <option v-for="p in MIDI_PROFILES" :key="p.value" :value="p.value">{{ p.label }}</option>
+            </select>
+          </div>
+          <div v-for="b in modState.midi.bindings" :key="b.id" class="bind-box">
+            <div class="bind-head">
+              <button
+                class="learn" :class="{ active: modState.midi.learnBindingId === b.id }"
+                title="Click, then move a knob or press a button on your controller"
+                @click="modState.midi.learnBindingId = modState.midi.learnBindingId === b.id ? null : b.id"
+              >{{ modState.midi.learnBindingId === b.id ? 'press…' : midiTriggerLabel(b) }}</button>
+              <span class="arrow">→</span>
+              <select v-model="b.target" class="bind-target" @change="resetMidiBindingRange(b)">
+                <optgroup label="Continuous">
+                  <option v-for="t in midiContinuous" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </optgroup>
+                <optgroup label="Options">
+                  <option v-for="t in MIDI_DISCRETE" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </optgroup>
+                <optgroup label="Toggles">
+                  <option v-for="t in MIDI_TOGGLES" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </optgroup>
+                <optgroup label="Actions">
+                  <option v-for="t in MIDI_ACTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </optgroup>
+              </select>
+              <button class="map-icn del" title="Remove" @click="removeMidiBinding(b.id)">✕</button>
+            </div>
+            <div v-if="midiTargetIsParam(b)" class="map-line map-range">
+              <span>Range</span>
+              <input type="number" step="any" v-model.number="b.min" />
+              <input type="number" step="any" v-model.number="b.max" />
+            </div>
+          </div>
+          <button class="wide" @click="addMidiBinding()">+ Add MIDI control</button>
         </div>
       </div>
     </section>
@@ -994,6 +1045,54 @@ button.wide {
 .learn.active {
   border-color: #ffd166;
   color: #ffd166;
+}
+.midi-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed #2c2c36;
+}
+.midi-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.midi-title .box-label {
+  flex: 1;
+}
+.profile-sel {
+  flex: none;
+  width: auto;
+  min-width: 0;
+  max-width: 62%;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+.bind-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 8px;
+  background: #171a20;
+  border: 1px solid #26303a;
+  border-radius: 7px;
+}
+.bind-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bind-head .learn {
+  min-width: 62px;
+  font-variant-numeric: tabular-nums;
+}
+.bind-target {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
 }
 .layer-head {
   display: flex;

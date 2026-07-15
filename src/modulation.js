@@ -1,7 +1,19 @@
 import { reactive } from 'vue'
 import { setParam, getParam, trackLabel } from './timeline.js'
 import { MAX_LAYERS } from './shaders/moire.js'
-import { settings, randomize, randomizeColors } from './settings.js'
+import {
+  settings,
+  randomize,
+  randomizeColors,
+  undoRandomize,
+  redoRandomize,
+  applyPreset,
+  PRESETS,
+  AA_MODES,
+  COLOR_MODES,
+  LAYER_OPS,
+  PATTERN_GROUPS,
+} from './settings.js'
 import { nextSlide } from './slideshow.js'
 
 // Live-input modulation: audio (microphone), MIDI controllers, a Leap Motion
@@ -71,6 +83,64 @@ export const MOD_TARGETS = (() => {
   return t.map((x) => ({ ...x, label: trackLabel(x.path) }))
 })()
 
+// --- MIDI control-surface targets ---------------------------------------
+//
+// MIDI is its own system (separate from the audio/Leap continuous
+// modulation): a MIDI CC or note can drive ANY UI control — continuous
+// params, discrete option selects, toggles, or one-shot actions.
+
+// Computed lazily (not at module-init) because settings.js and modulation.js
+// import each other — touching PATTERN_GROUPS at top level would hit a
+// temporal-dead-zone error during the circular import.
+let _patternCount = 0
+function patternCount() {
+  if (!_patternCount) _patternCount = PATTERN_GROUPS.reduce((n, g) => n + g.items.length, 0)
+  return _patternCount
+}
+
+// Discrete (stepped) targets: contiguous integer value ranges.
+function discreteInfo(path) {
+  if (path === 'aaMode') return { base: 0, count: AA_MODES.length }
+  if (path === 'colorMode') return { base: 0, count: COLOR_MODES.length }
+  if (path === 'layerCount') return { base: 1, count: MAX_LAYERS }
+  if (/^layers\.\d+\.pattern$/.test(path)) return { base: 0, count: patternCount() }
+  if (/^layers\.\d+\.op$/.test(path)) return { base: 0, count: LAYER_OPS.length }
+  return { base: 0, count: 2 }
+}
+
+export const MIDI_DISCRETE = (() => {
+  const t = [
+    { value: 'option:aaMode', label: 'Anti-alias' },
+    { value: 'option:colorMode', label: 'Color mode' },
+    { value: 'option:layerCount', label: 'Layer count' },
+  ]
+  for (let i = 0; i < MAX_LAYERS; i++) {
+    t.push({ value: `option:layers.${i}.pattern`, label: `L${i + 1} type` })
+    t.push({ value: `option:layers.${i}.op`, label: `L${i + 1} combine` })
+  }
+  return t
+})()
+
+export const MIDI_TOGGLES = [
+  { value: 'toggle:animate', label: 'Animate' },
+  { value: 'toggle:drift', label: 'Drift' },
+  { value: 'toggle:showFps', label: 'FPS counter' },
+]
+
+export const MIDI_ACTIONS = [
+  { value: 'action:randomize', label: 'Randomize' },
+  { value: 'action:colors', label: 'Random colors' },
+  { value: 'action:playpause', label: 'Play / pause' },
+  { value: 'action:nextPreset', label: 'Next preset' },
+  { value: 'action:prevPreset', label: 'Prev preset' },
+  { value: 'action:nextSlide', label: 'Next display slide' },
+  { value: 'action:undo', label: 'Undo randomize' },
+  { value: 'action:redo', label: 'Redo randomize' },
+]
+
+// Continuous params reuse MOD_TARGETS, prefixed 'param:'.
+export const MIDI_CONTINUOUS = () => MOD_TARGETS.map((t) => ({ value: 'param:' + t.path, label: t.label }))
+
 function blankHand() {
   return { present: false, palmX: 0.5, palmY: 0.5, palmZ: 0.5, pinch: 0, grab: 0, roll: 0.5 }
 }
@@ -79,7 +149,12 @@ export const modState = reactive({
   audio: { enabled: false, error: '', level: 0, bass: 0, mid: 0, treble: 0, beat: 0, bpm: 0 },
   beat: { action: 'none', every: 1, count: 0, sens: 1 },
   artnet: { enabled: false, connected: false, error: '', values: {} },
-  midi: { enabled: false, error: '', inputs: 0, lastCC: null, values: {}, devices: [] },
+  midi: {
+    enabled: false, error: '', inputs: 0, lastCC: null, values: {}, devices: [],
+    bindings: [], // { id, key, ttype:'cc'|'note', num, target, min, max }
+    learnBindingId: null, // binding waiting to learn its trigger
+    profile: '',
+  },
   leap: {
     enabled: false, error: '', connected: false, hands: 0,
     // primary (first) hand — kept for the "any hand" source ids
@@ -207,8 +282,16 @@ export function modSnapshot() {
   const beat = modState.beat.action !== 'none' || modState.beat.sens !== 1
     ? { action: modState.beat.action, every: modState.beat.every, sens: modState.beat.sens }
     : undefined
-  if (!list.length && !beat) return undefined
-  return { list, beat }
+  const midi = modState.midi.bindings.length
+    ? {
+        profile: modState.midi.profile || undefined,
+        binds: modState.midi.bindings.map(({ ttype, num, target, min, max }) => ({
+          ttype, num, target, min, max,
+        })),
+      }
+    : undefined
+  if (!list.length && !beat && !midi) return undefined
+  return { list, beat, midi }
 }
 
 export function modApply(mods) {
@@ -228,6 +311,20 @@ export function modApply(mods) {
   modState.beat.every = beat ? Math.max(1, +beat.every || 1) : 1
   modState.beat.sens = beat ? Math.min(2, Math.max(0.5, +beat.sens || 1)) : 1
   modState.beat.count = 0
+
+  const midi = !Array.isArray(mods) && mods?.midi
+  modState.midi.profile = midi?.profile || ''
+  modState.midi.bindings = (midi?.binds || []).map((b) => ({
+    id: 'b' + ++nextId + Math.random().toString(36).slice(2, 5),
+    key: midiKey(),
+    ttype: b.ttype === 'note' ? 'note' : 'cc',
+    num: b.num == null ? null : +b.num,
+    target: b.target,
+    min: +b.min,
+    max: +b.max,
+    _pressed: false,
+    _norm: null,
+  }))
 }
 
 // --- Audio (Web Audio API, microphone) ---------------------------------
@@ -357,17 +454,140 @@ function updateAudio() {
 // --- MIDI (Web MIDI API) ------------------------------------------------
 
 let midiAccess = null
+let presetIndex = 0
+
+// --- MIDI control bindings ----------------------------------------------
+
+let midiKeySeq = 0
+function midiKey() {
+  return 'k' + (midiKeySeq++).toString(36) + Math.random().toString(36).slice(2, 4)
+}
+
+function midiTargetRange(target) {
+  const [kind, path] = splitTarget(target)
+  if (kind === 'param') {
+    const t = MOD_TARGETS.find((x) => x.path === path)
+    return t ? [t.min, t.max] : [0, 1]
+  }
+  return [0, 1]
+}
+
+function splitTarget(target) {
+  const i = target.indexOf(':')
+  return [target.slice(0, i), target.slice(i + 1)]
+}
+
+export function addMidiBinding(target = 'param:zoom') {
+  const [min, max] = midiTargetRange(target)
+  modState.midi.bindings.push({
+    id: 'b' + ++nextId + Math.random().toString(36).slice(2, 5),
+    key: midiKey(),
+    ttype: 'cc',
+    num: null,
+    target,
+    min,
+    max,
+    _pressed: false,
+    _norm: null,
+  })
+}
+
+export function removeMidiBinding(id) {
+  const i = modState.midi.bindings.findIndex((b) => b.id === id)
+  if (i >= 0) modState.midi.bindings.splice(i, 1)
+  if (modState.midi.learnBindingId === id) modState.midi.learnBindingId = null
+}
+
+export function resetMidiBindingRange(b) {
+  const [min, max] = midiTargetRange(b.target)
+  b.min = min
+  b.max = max
+}
+
+function fireAction(name) {
+  if (name === 'randomize') randomize()
+  else if (name === 'colors') randomizeColors()
+  else if (name === 'playpause') settings.animate = !settings.animate
+  else if (name === 'nextPreset') {
+    presetIndex = (presetIndex + 1) % PRESETS.length
+    applyPreset(PRESETS[presetIndex])
+  } else if (name === 'prevPreset') {
+    presetIndex = (presetIndex - 1 + PRESETS.length) % PRESETS.length
+    applyPreset(PRESETS[presetIndex])
+  } else if (name === 'nextSlide') nextSlide()
+  else if (name === 'undo') undoRandomize()
+  else if (name === 'redo') redoRandomize()
+}
+
+// Route a MIDI event to any bindings listening to it. `type` is 'cc' or
+// 'note'; `norm` is 0..1 (cc value or note velocity).
+function dispatchMidi(type, num, norm) {
+  for (const b of modState.midi.bindings) {
+    if (b.ttype !== type || b.num !== num) continue
+    const [kind, path] = splitTarget(b.target)
+    if (kind === 'param') {
+      // Continuous — smoothed per frame in applyModulation.
+      b._norm = clamp01(norm)
+    } else if (kind === 'option') {
+      const { base, count } = discreteInfo(path)
+      if (type === 'note') {
+        const cur = Math.round(getParam(path))
+        setParam(path, base + (((cur - base + 1) % count) + count) % count)
+      } else {
+        setParam(path, base + Math.round((count - 1) * clamp01(norm)))
+      }
+    } else if (kind === 'toggle') {
+      if (type === 'note') setParam(path, !getParam(path))
+      else setParam(path, norm >= 0.5)
+    } else if (kind === 'action') {
+      const pressed = type === 'note' ? true : norm >= 0.5
+      if (pressed && !b._pressed) fireAction(path)
+      b._pressed = pressed
+    }
+  }
+}
 
 function onMIDIMessage(e) {
   const [status, d1, d2] = e.data
-  if ((status & 0xf0) !== 0xb0) return // control change only
-  modState.midi.values[d1] = d2 / 127
-  modState.midi.lastCC = d1
-  if (modState.learnId) {
-    const m = modState.mappings.find((x) => x.id === modState.learnId)
-    if (m) m.source = 'midi.cc' + d1
-    modState.learnId = null
+  const cmd = status & 0xf0
+  if (cmd === 0xb0) {
+    // Control change
+    modState.midi.values[d1] = d2 / 127
+    modState.midi.lastCC = d1
+    if (modState.midi.learnBindingId != null) {
+      learnMidiTrigger('cc', d1)
+      return
+    }
+    if (modState.learnId) {
+      // Legacy: learning a modulation-mapping source (kept for old setups).
+      const m = modState.mappings.find((x) => x.id === modState.learnId)
+      if (m) m.source = 'midi.cc' + d1
+      modState.learnId = null
+      return
+    }
+    dispatchMidi('cc', d1, d2 / 127)
+  } else if (cmd === 0x90 && d2 > 0) {
+    // Note on
+    if (modState.midi.learnBindingId != null) {
+      learnMidiTrigger('note', d1)
+      return
+    }
+    dispatchMidi('note', d1, d2 / 127)
+  } else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) {
+    // Note off: release any action bindings watching this note.
+    for (const b of modState.midi.bindings) {
+      if (b.ttype === 'note' && b.num === d1) b._pressed = false
+    }
   }
+}
+
+function learnMidiTrigger(ttype, num) {
+  const b = modState.midi.bindings.find((x) => x.id === modState.midi.learnBindingId)
+  if (b) {
+    b.ttype = ttype
+    b.num = num
+  }
+  modState.midi.learnBindingId = null
 }
 
 // (Re)bind message handlers to every input and refresh the device list. Some
@@ -431,6 +651,8 @@ export function stopMIDI() {
   modState.midi.devices = []
   modState.midi.inputs = 0
   modState.learnId = null
+  modState.midi.learnBindingId = null
+  // Bindings are configuration — keep them so re-enabling MIDI restores them.
 }
 
 // --- Leap Motion (Ultraleap tracking service WebSocket) -----------------
@@ -683,6 +905,17 @@ export function applyModulation() {
     const sm = smoothedValue(m, dt)
     if (sm != null) writeTarget(m, sm)
   }
+  // MIDI continuous bindings: light smoothing to iron out 7-bit stepping.
+  const k = Math.pow(0.6, dt * 60)
+  for (const b of modState.midi.bindings) {
+    if (b._norm == null || !b.target.startsWith('param:')) continue
+    const path = b.target.slice(6)
+    const targetVal = b.min + (b.max - b.min) * b._norm
+    const prev = smoothed.get(b.id) ?? targetVal
+    const sm = targetVal + (prev - targetVal) * k
+    smoothed.set(b.id, sm)
+    setParam(path, sm)
+  }
 }
 
 // Quick-start: add sensible default mappings for every enabled input,
@@ -719,4 +952,66 @@ export function autoMap() {
     add('artnet.ch2', 'thickness', 0.6, 0.8)
     add('artnet.ch3', 'layers.0.freq', 0.6, 0.8)
   }
+}
+
+// A readable label for a binding trigger.
+export function midiTriggerLabel(b) {
+  if (b.num == null) return 'unassigned'
+  return (b.ttype === 'note' ? 'Note ' : 'CC ') + b.num
+}
+
+// --- Controller profiles ------------------------------------------------
+
+export const MIDI_PROFILES = [
+  { value: 'nanokontrol-studio', label: 'KORG nanoKONTROL Studio' },
+]
+
+// Factory-default CC layout for the KORG nanoKONTROL Studio (native mode,
+// same numbering family as the nanoKONTROL2). Faders 0–7, knobs 16–23,
+// S/M/R buttons 32–39 / 48–55 / 64–71, transport 41–46, track/marker 58–62.
+// All remappable in KORG Kontrol Editor, and each can be MIDI-learned here.
+export function applyMidiProfile(name) {
+  if (name !== 'nanokontrol-studio') return
+  const b = (ttype, num, target, range) => {
+    const [min, max] = range || midiTargetRange(target)
+    return {
+      id: 'b' + ++nextId + Math.random().toString(36).slice(2, 5),
+      key: midiKey(),
+      ttype, num, target, min, max, _pressed: false, _norm: null,
+    }
+  }
+  modState.midi.bindings = [
+    // Faders → the big continuous knobs of the piece
+    b('cc', 0, 'param:zoom'),
+    b('cc', 1, 'param:thickness'),
+    b('cc', 2, 'param:layers.0.freq'),
+    b('cc', 3, 'param:layers.1.freq'),
+    b('cc', 4, 'param:animSpeed'),
+    b('cc', 5, 'param:layers.0.alpha'),
+    b('cc', 6, 'param:layers.1.alpha'),
+    b('cc', 7, 'param:layers.2.freq'),
+    // Knobs → rotations & offsets
+    b('cc', 16, 'param:layers.0.rot'),
+    b('cc', 17, 'param:layers.1.rot'),
+    b('cc', 18, 'param:layers.0.x'),
+    b('cc', 19, 'param:layers.0.y'),
+    b('cc', 20, 'param:layers.1.x'),
+    b('cc', 21, 'param:layers.1.y'),
+    b('cc', 22, 'option:colorMode'),
+    b('cc', 23, 'option:layers.0.pattern'),
+    // Solo/Mute buttons → toggles
+    b('cc', 32, 'toggle:animate'),
+    b('cc', 33, 'toggle:drift'),
+    b('cc', 34, 'toggle:showFps'),
+    // Transport → actions (buttons send 127 on press, 0 on release)
+    b('cc', 45, 'action:randomize'), // Rec
+    b('cc', 46, 'action:colors'), // Cycle
+    b('cc', 41, 'action:playpause'), // Play
+    b('cc', 43, 'action:prevPreset'), // Rewind
+    b('cc', 44, 'action:nextPreset'), // FFwd
+    b('cc', 58, 'action:undo'), // Track ◄
+    b('cc', 59, 'action:redo'), // Track ►
+    b('cc', 42, 'action:nextSlide'), // Stop
+  ]
+  modState.midi.profile = name
 }
