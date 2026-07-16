@@ -5,6 +5,7 @@ import ControlPanel from './components/ControlPanel.vue'
 import ShareDrawer from './components/ShareDrawer.vue'
 import TimelineBar from './components/TimelineBar.vue'
 import InputSetup from './components/InputSetup.vue'
+import { mdiAlert } from '@mdi/js'
 import { settings, loadFromHash, randomize, undoRandomize, redoRandomize } from './settings.js'
 import { saveToGallery } from './gallery.js'
 import { modes, saveMode, loadMode } from './modes.js'
@@ -166,32 +167,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <button @click="toggleFullscreen">⛶<small>Full</small></button>
     </nav>
     <InputSetup v-if="setupPopup" :which="setupPopup" @close="setupPopup = ''" />
-    <div v-if="showWarning" class="warn-backdrop">
-      <div class="warn-dialog" role="alertdialog" aria-labelledby="warn-title">
-        <h2 id="warn-title">⚠️ Seizure warning — photosensitive epilepsy</h2>
-        <p>
-          This tool produces high-contrast interference patterns that can
-          <strong>flash, strobe, and shift rapidly</strong>. Content like
-          this <strong>can trigger seizures</strong> in people with
-          photosensitive epilepsy — including people who have
-          <strong>never had a seizure before</strong>.
-        </p>
-        <p>
-          <strong>Animation is paused by default and we advise against
-          enabling it</strong> if you or anyone watching has epilepsy, a
-          history of seizures, or is unsure of their sensitivity. The
-          animated and slideshow modes substantially increase the risk.
-        </p>
-        <p>
-          Stop using this tool immediately and seek medical advice if you
-          experience dizziness, altered vision, eye or muscle twitching,
-          disorientation, or any involuntary movement.
-        </p>
-        <button class="warn-ok" @click="acknowledgeWarning">
-          I understand the risk
-        </button>
-      </div>
-    </div>
+    <v-dialog
+      v-model="showWarning" persistent max-width="480"
+      role="alertdialog" aria-labelledby="warn-title"
+    >
+      <v-card class="warn-card" color="surface-bright">
+        <v-card-title id="warn-title" class="warn-title">
+          <v-icon :icon="mdiAlert" color="warning" class="mr-2" />
+          Seizure warning — photosensitive epilepsy
+        </v-card-title>
+        <v-card-text class="warn-body">
+          <p>
+            This tool produces high-contrast interference patterns that can
+            <strong>flash, strobe, and shift rapidly</strong>. Content like
+            this <strong>can trigger seizures</strong> in people with
+            photosensitive epilepsy — including people who have
+            <strong>never had a seizure before</strong>.
+          </p>
+          <p>
+            <strong>Animation is paused by default and we advise against
+            enabling it</strong> if you or anyone watching has epilepsy, a
+            history of seizures, or is unsure of their sensitivity. The
+            animated and slideshow modes substantially increase the risk.
+          </p>
+          <p>
+            Stop using this tool immediately and seek medical advice if you
+            experience dizziness, altered vision, eye or muscle twitching,
+            disorientation, or any involuntary movement.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn block color="primary" variant="flat" @click="acknowledgeWarning">
+            I understand the risk
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
   </v-app>
 </template>
@@ -263,54 +274,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .slideshow-badge:focus-visible {
   opacity: 1;
 }
-.warn-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+.warn-card {
+  border: 1px solid #35314f;
+  padding: 6px 6px 12px;
+}
+.warn-title {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(5, 5, 8, 0.82);
-  backdrop-filter: blur(6px);
-}
-.warn-dialog {
-  max-width: 460px;
-  padding: 26px 28px;
-  background: #14141a;
-  border: 1px solid #35314f;
-  border-radius: 12px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
-}
-.warn-dialog h2 {
   font-size: 16px;
   font-weight: 650;
   color: #ffd166;
-  margin-bottom: 12px;
+  white-space: normal;
+  line-height: 1.3;
 }
-.warn-dialog p {
+.warn-body p {
   font-size: 13px;
   line-height: 1.6;
   color: #c9c9d1;
   margin-bottom: 12px;
 }
-.warn-dialog strong {
+.warn-body p:last-child {
+  margin-bottom: 0;
+}
+.warn-body strong {
   color: #e4e4e9;
-}
-.warn-ok {
-  width: 100%;
-  margin-top: 4px;
-  padding: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #e9e6ff;
-  background: #342e6e;
-  border: 1px solid #4c42a3;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.warn-ok:hover {
-  background: #3e3784;
 }
 .view-buttons button {
   padding: 5px 12px;

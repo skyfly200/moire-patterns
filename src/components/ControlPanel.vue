@@ -1,5 +1,9 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
+import {
+  mdiDrag, mdiContentCopy, mdiClose, mdiDiceMultiple, mdiPalette,
+  mdiUndo, mdiRedo, mdiPlay, mdiFlash, mdiPlus, mdiCog,
+} from '@mdi/js'
 import {
   settings,
   shaderState,
@@ -55,7 +59,7 @@ import {
 
 defineEmits(['slideshow', 'setup'])
 
-// --- Accordion groups ---------------------------------------------------
+// --- Accordion groups (v-expansion-panels) ------------------------------
 const GROUPS = [
   { id: 'presets', label: 'Presets' },
   { id: 'pattern', label: 'Pattern' },
@@ -63,14 +67,12 @@ const GROUPS = [
   { id: 'input', label: 'Input' },
   { id: 'layers', label: 'Layers' },
 ]
-const open = reactive({
-  presets: true, pattern: true, animation: false, input: false, layers: true,
-})
-function toggle(id) {
-  open[id] = !open[id]
+const openPanels = ref(['presets', 'pattern', 'layers'])
+function isOpen(id) {
+  return openPanels.value.includes(id)
 }
 function jump(id) {
-  open[id] = true
+  if (!isOpen(id)) openPanels.value = [...openPanels.value, id]
   requestAnimationFrame(() =>
     document.getElementById('grp-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
   )
@@ -83,17 +85,17 @@ function setRotDeg(layer, deg) {
   layer.rot = (Number(deg) * Math.PI) / 180
 }
 
-function toggleAudio(e) {
-  e.target.checked ? startAudio() : stopAudio()
+function toggleAudio(v) {
+  v ? startAudio() : stopAudio()
 }
-function toggleMIDI(e) {
-  e.target.checked ? startMIDI() : stopMIDI()
+function toggleMIDI(v) {
+  v ? startMIDI() : stopMIDI()
 }
-function toggleLeap(e) {
-  e.target.checked ? startLeap() : stopLeap()
+function toggleLeap(v) {
+  v ? startLeap() : stopLeap()
 }
-function toggleArtnet(e) {
-  e.target.checked ? startArtnet() : stopArtnet()
+function toggleArtnet(v) {
+  v ? startArtnet() : stopArtnet()
 }
 
 const midiContinuous = MIDI_CONTINUOUS()
@@ -175,440 +177,396 @@ function onDrop(i) {
     <nav class="acc-nav">
       <button
         v-for="g in GROUPS" :key="g.id"
-        :class="{ active: open[g.id] }"
+        :class="{ active: isOpen(g.id) }"
         @click="jump(g.id)"
       >{{ g.label }}</button>
     </nav>
 
-    <!-- Presets & Random -->
-    <section id="grp-presets" class="acc-group">
-      <button class="acc-head" @click="toggle('presets')">
-        <span class="chev" :class="{ open: open.presets }">▸</span> Presets &amp; Random
-      </button>
-      <div v-show="open.presets" class="acc-body">
-        <div class="preset-grid">
-          <button v-for="p in PRESETS" :key="p.name" @click="applyPreset(p)">
-            {{ p.name }}
-          </button>
-        </div>
-        <div class="row rand-row">
-          <button
-            class="hist-btn" :disabled="!history.past.length"
-            title="Go back to the pattern before the last randomize (Z)"
-            @click="undoRandomize()"
-          >↶</button>
-          <button class="accent" @click="randomize()">Randomize</button>
-          <button
-            class="hist-btn" :disabled="!history.future.length"
-            title="Redo (Shift+Z)"
-            @click="redoRandomize()"
-          >↷</button>
-        </div>
-        <div class="row rand-row">
-          <button title="Randomize the pattern structure only" @click="randomizePattern()">🎲 Pattern</button>
-          <button title="Random colors only" @click="randomizeColors()">🎨 Colors</button>
-        </div>
-        <div class="rand-opts" title="What Randomize (and the R key / on-beat randomize) affects">
-          <label v-for="[key, label] in RANDOMIZE_OPTS" :key="key">
-            <input type="checkbox" v-model="randomizeOpts[key]" />
-            {{ label }}
-          </label>
-        </div>
-        <div class="row slideshow-row">
-          <button
-            class="slideshow-btn"
-            title="Start the display view, hiding the UI. Shortcut: S · exit with Esc"
-            @click="$emit('slideshow')"
-          >▶ Display</button>
-          <select v-model="slideshow.mode">
-            <option v-for="m in SLIDESHOW_MODES" :key="m.value" :value="m.value">
-              {{ m.label }}
-            </option>
-          </select>
-        </div>
-        <div v-if="slideshow.mode !== 'current'" class="row slideshow-row">
-          <span class="every">every</span>
-          <input type="number" min="2" max="60" step="1" v-model.number="slideshow.interval" />
-          <span>seconds</span>
-        </div>
-        <div v-if="isMorphMode" class="row slideshow-row" title="How long each fade takes (up to the interval)">
-          <span class="every">fade over</span>
-          <input type="number" min="0.5" max="60" step="0.5" v-model.number="slideshow.morphRate" />
-          <span>seconds</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Pattern -->
-    <section id="grp-pattern" class="acc-group">
-      <button class="acc-head" @click="toggle('pattern')">
-        <span class="chev" :class="{ open: open.pattern }">▸</span> Pattern
-      </button>
-      <div v-show="open.pattern" class="acc-body">
-        <label class="row">
-          <span>Anti-alias</span>
-          <select v-model.number="settings.aaMode">
-            <option v-for="m in AA_MODES" :key="m.value" :value="m.value">{{ m.label }}</option>
-          </select>
-          <KeyBtn path="aaMode" />
-        </label>
-        <label class="row" title="Render resolution. Lower values improve smoothness on slower GPUs.">
-          <span>Resolution</span>
-          <select v-model.number="settings.resScale">
-            <option :value="0">Auto (sharp)</option>
-            <option :value="1">100%</option>
-            <option :value="0.75">75%</option>
-            <option :value="0.5">50%</option>
-            <option :value="2160">2160 px</option>
-            <option :value="1440">1440 px</option>
-            <option :value="1080">1080 px</option>
-            <option :value="720">720 px</option>
-            <option :value="540">540 px</option>
-            <option :value="480">480 px</option>
-            <option :value="360">360 px</option>
-            <option :value="240">240 px</option>
-          </select>
-        </label>
-        <label class="row">
-          <span>FPS counter</span>
-          <input type="checkbox" v-model="settings.showFps" />
-        </label>
-        <label class="row">
-          <span>Layers</span>
-          <input type="range" min="1" max="8" step="1" v-model.number="settings.layerCount" />
-          <b>{{ settings.layerCount }}</b>
-          <KeyBtn path="layerCount" />
-        </label>
-        <label class="row">
-          <span>Zoom</span>
-          <input type="range" min="0.25" max="4" step="0.01" v-model.number="settings.zoom" />
-          <b>{{ settings.zoom.toFixed(2) }}</b>
-          <KeyBtn path="zoom" />
-        </label>
-        <label class="row">
-          <span>Line width</span>
-          <input type="range" min="0.05" max="0.95" step="0.01" v-model.number="settings.thickness" />
-          <b>{{ settings.thickness.toFixed(2) }}</b>
-          <KeyBtn path="thickness" />
-        </label>
-        <label class="row">
-          <span>Color mode</span>
-          <select v-model.number="settings.colorMode">
-            <option v-for="c in COLOR_MODES" :key="c.value" :value="c.value">{{ c.label }}</option>
-          </select>
-          <KeyBtn path="colorMode" />
-        </label>
-        <div class="row colors">
-          <span>Colors</span>
-          <input type="color" v-model="settings.colorA" title="Background" />
-          <KeyBtn path="colorA" />
-          <template v-if="settings.colorMode === 0 || settings.colorMode === 1">
-            <input type="color" v-model="settings.colorB" :title="settings.colorMode === 1 ? 'Gradient middle' : 'Foreground'" />
-            <KeyBtn path="colorB" />
-          </template>
-          <template v-if="settings.colorMode === 1">
-            <input type="color" v-model="settings.colorC" title="Gradient end" />
-            <KeyBtn path="colorC" />
-          </template>
-          <em v-if="settings.colorMode === 2" class="note">hue follows pattern</em>
-          <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
-        </div>
-        <div v-if="anyCustom" class="custom-box">
-          <span class="box-label">Custom pattern</span>
-          <textarea v-model="settings.customExpr" rows="3" spellcheck="false"
-            placeholder="sin(d * freq + 3.0 * sin(a * 5.0))" />
-          <p class="note">
-            GLSL expression → float in [-1, 1]. Vars: <em>p</em> (vec2),
-            <em>freq</em>, <em>d</em> = length(p), <em>a</em> = angle, <em>t</em> = time
-          </p>
-        </div>
-        <div v-if="anyCustomShape" class="custom-box">
-          <span class="box-label">Custom shape</span>
-          <textarea v-model="settings.customShapeExpr" rows="3" spellcheck="false"
-            placeholder="d - r * (0.7 + 0.3 * cos(a * 5.0))" />
-          <p class="note">
-            Signed distance → negative inside the shape. Vars: <em>p</em>,
-            <em>r</em> = size from frequency, <em>freq</em>, <em>d</em>, <em>a</em>, <em>t</em>
-          </p>
-        </div>
-        <p v-if="(anyCustom || anyCustomShape) && shaderState.error" class="err">{{ shaderState.error }}</p>
-      </div>
-    </section>
-
-    <!-- Animation -->
-    <section id="grp-animation" class="acc-group">
-      <button class="acc-head" @click="toggle('animation')">
-        <span class="chev" :class="{ open: open.animation }">▸</span> Animation
-      </button>
-      <div v-show="open.animation" class="acc-body">
-        <label class="row">
-          <span>Animate</span>
-          <input type="checkbox" v-model="settings.animate" />
-        </label>
-        <label class="row" title="Built-in slow orbit and counter-rotation of layers">
-          <span>Drift</span>
-          <input type="checkbox" v-model="settings.drift" />
-        </label>
-        <label class="row">
-          <span>Speed</span>
-          <input type="range" min="0.1" max="4" step="0.1" v-model.number="settings.animSpeed" />
-          <b>{{ settings.animSpeed.toFixed(1) }}×</b>
-          <KeyBtn path="animSpeed" />
-        </label>
-      </div>
-    </section>
-
-    <!-- Live Input -->
-    <section id="grp-input" class="acc-group">
-      <button class="acc-head" @click="toggle('input')">
-        <span class="chev" :class="{ open: open.input }">▸</span> Live Input
-      </button>
-      <div v-show="open.input" class="acc-body">
-        <label class="row">
-          <span>Audio (mic)</span>
-          <input type="checkbox" :checked="modState.audio.enabled" @change="toggleAudio" />
-          <span v-if="modState.audio.enabled" class="meter">
-            <span class="meter-fill" :style="{ width: modState.audio.level * 100 + '%' }" />
-          </span>
-        </label>
-        <p v-if="modState.audio.error" class="err">{{ modState.audio.error }}</p>
-        <div v-if="modState.audio.enabled" class="row">
-          <span>Beat</span>
-          <span class="beat-dot" :class="{ on: modState.audio.beat > 0.5 }" />
-          <em class="note">{{ modState.audio.bpm ? '~' + modState.audio.bpm + ' BPM' : 'listening…' }}</em>
-        </div>
-        <label v-if="modState.audio.enabled" class="row" title="Higher = more beats detected">
-          <span>Sensitivity</span>
-          <input type="range" min="0.5" max="2" step="0.05" v-model.number="modState.beat.sens" />
-          <b>{{ modState.beat.sens.toFixed(2) }}</b>
-        </label>
-        <label v-if="modState.audio.enabled" class="row">
-          <span>On beat</span>
-          <select v-model="modState.beat.action">
-            <option v-for="a in BEAT_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
-          </select>
-        </label>
-        <label v-if="modState.audio.enabled && modState.beat.action !== 'none'" class="row">
-          <span>Every</span>
-          <input type="number" min="1" max="32" step="1" class="beat-every" v-model.number="modState.beat.every" />
-          <em class="note">beat{{ modState.beat.every === 1 ? '' : 's' }}</em>
-        </label>
-
-        <label class="row">
-          <span>MIDI</span>
-          <input type="checkbox" :checked="modState.midi.enabled" @change="toggleMIDI" />
-          <em v-if="modState.midi.enabled" class="note">
-            {{ modState.midi.inputs }} device{{ modState.midi.inputs === 1 ? '' : 's' }}
-          </em>
-          <button class="setup-btn" title="MIDI setup / devices" @click="$emit('setup', 'midi')">setup</button>
-        </label>
-        <p v-if="modState.midi.error" class="err">{{ modState.midi.error }}</p>
-
-        <label class="row">
-          <span>Leap Motion</span>
-          <input type="checkbox" :checked="modState.leap.enabled" @change="toggleLeap" />
-          <em v-if="modState.leap.connected" class="note">
-            {{ modState.leap.hands }} hand{{ modState.leap.hands === 1 ? '' : 's' }}
-          </em>
-        </label>
-        <p v-if="modState.leap.error" class="err">{{ modState.leap.error }}</p>
-
-        <label class="row" title="DMX input via the bundled bridge">
-          <span>Art-Net</span>
-          <input type="checkbox" :checked="modState.artnet.enabled" @change="toggleArtnet" />
-          <em v-if="modState.artnet.connected" class="note">bridge connected</em>
-          <button class="setup-btn" title="Art-Net / DMX setup" @click="$emit('setup', 'artnet')">setup</button>
-        </label>
-        <p v-if="modState.artnet.error" class="err">{{ modState.artnet.error }}</p>
-
-        <!-- Mappings -->
-        <div
-          v-for="(m, mi) in modState.mappings" :key="m.id"
-          class="map-box" :class="{ routing: isModRoute(m.path) }"
-          @dragover.prevent @drop="onDrop(mi)"
-        >
-          <div class="map-head">
-            <span
-              class="map-handle" title="Drag to reorder"
-              draggable="true" @dragstart="onDragStart(mi, $event)"
-            >⠿</span>
-            <span class="map-key">Map {{ mapLetter(mi) }}</span>
-            <button class="map-icn" title="Duplicate mapping" @click="duplicateMapping(m.id)">⧉</button>
-            <button class="map-icn del" title="Remove mapping" @click="removeMapping(m.id)">✕</button>
+    <v-expansion-panels v-model="openPanels" multiple flat class="panels">
+      <!-- Presets & Random -->
+      <v-expansion-panel id="grp-presets" value="presets" title="Presets &amp; Random">
+        <v-expansion-panel-text>
+          <div class="preset-grid">
+            <v-btn
+              v-for="p in PRESETS" :key="p.name"
+              size="small" variant="tonal" class="tt-none" @click="applyPreset(p)"
+            >{{ p.name }}</v-btn>
           </div>
-          <label class="map-line">
-            <span>Source</span>
-            <select v-model="m.source">
-              <optgroup label="Audio">
-                <option v-for="s in AUDIO_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </optgroup>
-              <optgroup v-for="g in LEAP_SOURCE_GROUPS" :key="g.label" :label="g.label">
-                <option v-for="s in g.items" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </optgroup>
-              <optgroup label="Art-Net">
-                <option v-for="s in ARTNET_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </optgroup>
-              <optgroup v-if="m.source.startsWith('midi.')" label="MIDI (legacy)">
-                <option :value="m.source">MIDI · {{ m.source.replace('midi.cc', 'CC ') }}</option>
-              </optgroup>
-            </select>
-          </label>
-          <label class="map-line">
-            <span>Target</span>
-            <select v-model="m.path" @change="resetMappingRange(m)">
-              <optgroup label="Settings">
-                <option v-for="t in MOD_TARGETS" :key="t.path" :value="t.path">{{ t.label }}</option>
-              </optgroup>
-              <optgroup v-if="modRoutes(m.id).length" label="Modulate a mapping">
-                <option v-for="r in modRoutes(m.id)" :key="r.value" :value="r.value">{{ r.label }}</option>
-              </optgroup>
-            </select>
-          </label>
-          <div class="map-line map-range">
-            <span>Range</span>
-            <input type="number" step="any" v-model.number="m.min" />
-            <input type="number" step="any" v-model.number="m.max" />
+          <div class="btn-row mt-2">
+            <v-btn :icon="mdiUndo" size="small" variant="tonal" :disabled="!history.past.length"
+              title="Go back to the pattern before the last randomize (Z)" @click="undoRandomize()" />
+            <v-btn color="primary" variant="flat" class="flex-grow-1 tt-none" @click="randomize()">Randomize</v-btn>
+            <v-btn :icon="mdiRedo" size="small" variant="tonal" :disabled="!history.future.length"
+              title="Redo (Shift+Z)" @click="redoRandomize()" />
           </div>
-          <div class="map-line">
-            <span>Smooth</span>
-            <input type="range" min="0" max="0.995" step="0.005" v-model.number="m.smooth" />
+          <div class="btn-row mt-2">
+            <v-btn :prepend-icon="mdiDiceMultiple" size="small" variant="tonal" class="flex-grow-1 tt-none"
+              title="Randomize the pattern structure only" @click="randomizePattern()">Pattern</v-btn>
+            <v-btn :prepend-icon="mdiPalette" size="small" variant="tonal" class="flex-grow-1 tt-none"
+              title="Random colors only" @click="randomizeColors()">Colors</v-btn>
           </div>
-        </div>
-
-        <div class="row rand-row">
-          <button class="wide" @click="addMapping()">+ Add mapping</button>
-          <button
-            class="wide" :disabled="!anyInputEnabled"
-            title="Add sensible default mappings for every enabled input"
-            @click="autoMap()"
-          >⚡ Auto-map</button>
-        </div>
-
-        <!-- MIDI control surface: separate from audio/leap modulation, can
-             drive any control (continuous, discrete, toggle, or action). -->
-        <div v-if="modState.midi.enabled || modState.midi.bindings.length" class="midi-block">
-          <div class="midi-title">
-            <span class="box-label">MIDI Control</span>
-            <select
-              class="profile-sel"
-              :value="modState.midi.profile"
-              title="Load a controller profile"
-              @change="applyMidiProfile($event.target.value)"
-            >
-              <option value="">Profile…</option>
-              <option v-for="p in MIDI_PROFILES" :key="p.value" :value="p.value">{{ p.label }}</option>
+          <div class="rand-opts" title="What Randomize (and R / on-beat) affects">
+            <label v-for="[key, label] in RANDOMIZE_OPTS" :key="key">
+              <input type="checkbox" v-model="randomizeOpts[key]" /> {{ label }}
+            </label>
+          </div>
+          <div class="ctl mt-2">
+            <v-btn :prepend-icon="mdiPlay" size="small" variant="tonal" class="tt-none display-btn"
+              title="Start the display view (S · Esc exits)" @click="$emit('slideshow')">Display</v-btn>
+            <select v-model="slideshow.mode" class="nsel">
+              <option v-for="m in SLIDESHOW_MODES" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
           </div>
-          <div v-for="b in modState.midi.bindings" :key="b.id" class="bind-box">
-            <div class="bind-head">
-              <button
-                class="learn" :class="{ active: modState.midi.learnBindingId === b.id }"
-                title="Click, then move a knob or press a button on your controller"
-                @click="modState.midi.learnBindingId = modState.midi.learnBindingId === b.id ? null : b.id"
-              >{{ modState.midi.learnBindingId === b.id ? 'press…' : midiTriggerLabel(b) }}</button>
-              <span class="arrow">→</span>
-              <select v-model="b.target" class="bind-target" @change="resetMidiBindingRange(b)">
-                <optgroup label="Continuous">
-                  <option v-for="t in midiContinuous" :key="t.value" :value="t.value">{{ t.label }}</option>
+          <div v-if="slideshow.mode !== 'current'" class="ctl">
+            <span class="lbl">every</span>
+            <input type="number" min="2" max="60" step="1" class="nnum" v-model.number="slideshow.interval" />
+            <span class="unit">seconds</span>
+          </div>
+          <div v-if="isMorphMode" class="ctl" title="How long each fade takes (up to the interval)">
+            <span class="lbl">fade over</span>
+            <input type="number" min="0.5" max="60" step="0.5" class="nnum" v-model.number="slideshow.morphRate" />
+            <span class="unit">seconds</span>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Pattern -->
+      <v-expansion-panel id="grp-pattern" value="pattern" title="Pattern">
+        <v-expansion-panel-text>
+          <div class="ctl">
+            <span class="lbl">Anti-alias</span>
+            <select v-model.number="settings.aaMode" class="nsel">
+              <option v-for="m in AA_MODES" :key="m.value" :value="m.value">{{ m.label }}</option>
+            </select>
+            <KeyBtn path="aaMode" />
+          </div>
+          <div class="ctl" title="Render resolution. Lower = smoother on slower GPUs.">
+            <span class="lbl">Resolution</span>
+            <select v-model.number="settings.resScale" class="nsel">
+              <option :value="0">Auto (sharp)</option>
+              <option :value="1">100%</option>
+              <option :value="0.75">75%</option>
+              <option :value="0.5">50%</option>
+              <option :value="2160">2160 px</option>
+              <option :value="1440">1440 px</option>
+              <option :value="1080">1080 px</option>
+              <option :value="720">720 px</option>
+              <option :value="540">540 px</option>
+              <option :value="480">480 px</option>
+              <option :value="360">360 px</option>
+              <option :value="240">240 px</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <span class="lbl">FPS counter</span>
+            <v-switch v-model="settings.showFps" hide-details density="compact" class="ml-auto" />
+          </div>
+          <div class="ctl">
+            <span class="lbl">Layers</span>
+            <v-slider v-model="settings.layerCount" :min="1" :max="8" :step="1" class="sl" />
+            <span class="val">{{ settings.layerCount }}</span>
+            <KeyBtn path="layerCount" />
+          </div>
+          <div class="ctl">
+            <span class="lbl">Zoom</span>
+            <v-slider v-model="settings.zoom" :min="0.25" :max="4" :step="0.01" class="sl" />
+            <span class="val">{{ settings.zoom.toFixed(2) }}</span>
+            <KeyBtn path="zoom" />
+          </div>
+          <div class="ctl">
+            <span class="lbl">Line width</span>
+            <v-slider v-model="settings.thickness" :min="0.05" :max="0.95" :step="0.01" class="sl" />
+            <span class="val">{{ settings.thickness.toFixed(2) }}</span>
+            <KeyBtn path="thickness" />
+          </div>
+          <div class="ctl">
+            <span class="lbl">Color mode</span>
+            <select v-model.number="settings.colorMode" class="nsel">
+              <option v-for="c in COLOR_MODES" :key="c.value" :value="c.value">{{ c.label }}</option>
+            </select>
+            <KeyBtn path="colorMode" />
+          </div>
+          <div class="ctl colors">
+            <span class="lbl">Colors</span>
+            <input type="color" v-model="settings.colorA" title="Background" />
+            <KeyBtn path="colorA" />
+            <template v-if="settings.colorMode === 0 || settings.colorMode === 1">
+              <input type="color" v-model="settings.colorB" :title="settings.colorMode === 1 ? 'Gradient middle' : 'Foreground'" />
+              <KeyBtn path="colorB" />
+            </template>
+            <template v-if="settings.colorMode === 1">
+              <input type="color" v-model="settings.colorC" title="Gradient end" />
+              <KeyBtn path="colorC" />
+            </template>
+            <em v-if="settings.colorMode === 2" class="note">hue follows pattern</em>
+            <em v-if="settings.colorMode === 3" class="note">set per layer below</em>
+          </div>
+          <div v-if="anyCustom" class="custom-box">
+            <span class="box-label">Custom pattern</span>
+            <textarea v-model="settings.customExpr" rows="3" spellcheck="false"
+              placeholder="sin(d * freq + 3.0 * sin(a * 5.0))" />
+            <p class="note">GLSL → float in [-1, 1]. Vars: <em>p</em>, <em>freq</em>, <em>d</em>, <em>a</em>, <em>t</em></p>
+          </div>
+          <div v-if="anyCustomShape" class="custom-box">
+            <span class="box-label">Custom shape</span>
+            <textarea v-model="settings.customShapeExpr" rows="3" spellcheck="false"
+              placeholder="d - r * (0.7 + 0.3 * cos(a * 5.0))" />
+            <p class="note">Signed distance, negative inside. Vars: <em>p</em>, <em>r</em>, <em>freq</em>, <em>d</em>, <em>a</em>, <em>t</em></p>
+          </div>
+          <p v-if="(anyCustom || anyCustomShape) && shaderState.error" class="err">{{ shaderState.error }}</p>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Animation -->
+      <v-expansion-panel id="grp-animation" value="animation" title="Animation">
+        <v-expansion-panel-text>
+          <div class="ctl">
+            <span class="lbl">Animate</span>
+            <v-switch v-model="settings.animate" hide-details density="compact" class="ml-auto" />
+          </div>
+          <div class="ctl" title="Built-in slow orbit and counter-rotation of layers">
+            <span class="lbl">Drift</span>
+            <v-switch v-model="settings.drift" hide-details density="compact" class="ml-auto" />
+          </div>
+          <div class="ctl">
+            <span class="lbl">Speed</span>
+            <v-slider v-model="settings.animSpeed" :min="0.1" :max="4" :step="0.1" class="sl" />
+            <span class="val">{{ settings.animSpeed.toFixed(1) }}×</span>
+            <KeyBtn path="animSpeed" />
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Live Input -->
+      <v-expansion-panel id="grp-input" value="input" title="Live Input">
+        <v-expansion-panel-text>
+          <div class="ctl">
+            <span class="lbl">Audio (mic)</span>
+            <v-switch :model-value="modState.audio.enabled" @update:model-value="toggleAudio" hide-details density="compact" />
+            <span v-if="modState.audio.enabled" class="meter">
+              <span class="meter-fill" :style="{ width: modState.audio.level * 100 + '%' }" />
+            </span>
+          </div>
+          <p v-if="modState.audio.error" class="err">{{ modState.audio.error }}</p>
+          <div v-if="modState.audio.enabled" class="ctl">
+            <span class="lbl">Beat</span>
+            <span class="beat-dot" :class="{ on: modState.audio.beat > 0.5 }" />
+            <em class="note">{{ modState.audio.bpm ? '~' + modState.audio.bpm + ' BPM' : 'listening…' }}</em>
+          </div>
+          <div v-if="modState.audio.enabled" class="ctl" title="Higher = more beats detected">
+            <span class="lbl">Sensitivity</span>
+            <v-slider v-model="modState.beat.sens" :min="0.5" :max="2" :step="0.05" class="sl" />
+            <span class="val">{{ modState.beat.sens.toFixed(2) }}</span>
+          </div>
+          <div v-if="modState.audio.enabled" class="ctl">
+            <span class="lbl">On beat</span>
+            <select v-model="modState.beat.action" class="nsel">
+              <option v-for="a in BEAT_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
+            </select>
+          </div>
+          <div v-if="modState.audio.enabled && modState.beat.action !== 'none'" class="ctl">
+            <span class="lbl">Every</span>
+            <input type="number" min="1" max="32" step="1" class="nnum" v-model.number="modState.beat.every" />
+            <span class="unit">beat{{ modState.beat.every === 1 ? '' : 's' }}</span>
+          </div>
+
+          <div class="ctl">
+            <span class="lbl">MIDI</span>
+            <v-switch :model-value="modState.midi.enabled" @update:model-value="toggleMIDI" hide-details density="compact" />
+            <em v-if="modState.midi.enabled" class="note ml-1">{{ modState.midi.inputs }} dev</em>
+            <v-btn :prepend-icon="mdiCog" size="x-small" variant="tonal" class="tt-none ml-auto" @click="$emit('setup', 'midi')">setup</v-btn>
+          </div>
+          <p v-if="modState.midi.error" class="err">{{ modState.midi.error }}</p>
+
+          <div class="ctl">
+            <span class="lbl">Leap Motion</span>
+            <v-switch :model-value="modState.leap.enabled" @update:model-value="toggleLeap" hide-details density="compact" />
+            <em v-if="modState.leap.connected" class="note ml-1">{{ modState.leap.hands }} hand{{ modState.leap.hands === 1 ? '' : 's' }}</em>
+          </div>
+          <p v-if="modState.leap.error" class="err">{{ modState.leap.error }}</p>
+
+          <div class="ctl">
+            <span class="lbl">Art-Net</span>
+            <v-switch :model-value="modState.artnet.enabled" @update:model-value="toggleArtnet" hide-details density="compact" />
+            <em v-if="modState.artnet.connected" class="note ml-1">connected</em>
+            <v-btn :prepend-icon="mdiCog" size="x-small" variant="tonal" class="tt-none ml-auto" @click="$emit('setup', 'artnet')">setup</v-btn>
+          </div>
+          <p v-if="modState.artnet.error" class="err">{{ modState.artnet.error }}</p>
+
+          <!-- Modulation mappings (audio / leap / art-net) -->
+          <div
+            v-for="(m, mi) in modState.mappings" :key="m.id"
+            class="map-box" :class="{ routing: isModRoute(m.path) }"
+            @dragover.prevent @drop="onDrop(mi)"
+          >
+            <div class="map-head">
+              <v-icon :icon="mdiDrag" size="16" class="map-handle" title="Drag to reorder"
+                draggable="true" @dragstart="onDragStart(mi, $event)" />
+              <span class="map-key">Map {{ mapLetter(mi) }}</span>
+              <v-btn :icon="mdiContentCopy" size="x-small" variant="text" title="Duplicate" @click="duplicateMapping(m.id)" />
+              <v-btn :icon="mdiClose" size="x-small" variant="text" color="error" title="Remove" @click="removeMapping(m.id)" />
+            </div>
+            <div class="map-line">
+              <span>Source</span>
+              <select v-model="m.source" class="nsel">
+                <optgroup label="Audio">
+                  <option v-for="s in AUDIO_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </optgroup>
-                <optgroup label="Options">
-                  <option v-for="t in MIDI_DISCRETE" :key="t.value" :value="t.value">{{ t.label }}</option>
+                <optgroup v-for="g in LEAP_SOURCE_GROUPS" :key="g.label" :label="g.label">
+                  <option v-for="s in g.items" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </optgroup>
-                <optgroup label="Toggles">
-                  <option v-for="t in MIDI_TOGGLES" :key="t.value" :value="t.value">{{ t.label }}</option>
+                <optgroup label="Art-Net">
+                  <option v-for="s in ARTNET_SOURCES" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </optgroup>
-                <optgroup label="Actions">
-                  <option v-for="t in MIDI_ACTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+                <optgroup v-if="m.source.startsWith('midi.')" label="MIDI (legacy)">
+                  <option :value="m.source">MIDI · {{ m.source.replace('midi.cc', 'CC ') }}</option>
                 </optgroup>
               </select>
-              <button class="map-icn del" title="Remove" @click="removeMidiBinding(b.id)">✕</button>
             </div>
-            <div v-if="midiTargetIsParam(b)" class="map-line map-range">
+            <div class="map-line">
+              <span>Target</span>
+              <select v-model="m.path" class="nsel" @change="resetMappingRange(m)">
+                <optgroup label="Settings">
+                  <option v-for="t in MOD_TARGETS" :key="t.path" :value="t.path">{{ t.label }}</option>
+                </optgroup>
+                <optgroup v-if="modRoutes(m.id).length" label="Modulate a mapping">
+                  <option v-for="r in modRoutes(m.id)" :key="r.value" :value="r.value">{{ r.label }}</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="map-line map-range">
               <span>Range</span>
-              <input type="number" step="any" v-model.number="b.min" />
-              <input type="number" step="any" v-model.number="b.max" />
+              <input type="number" step="any" v-model.number="m.min" />
+              <input type="number" step="any" v-model.number="m.max" />
+            </div>
+            <div class="ctl">
+              <span class="lbl sm">Smooth</span>
+              <v-slider v-model="m.smooth" :min="0" :max="0.995" :step="0.005" class="sl" />
             </div>
           </div>
-          <button class="wide" @click="addMidiBinding()">+ Add MIDI control</button>
-        </div>
-      </div>
-    </section>
 
-    <!-- Layers -->
-    <section id="grp-layers" class="acc-group">
-      <button class="acc-head" @click="toggle('layers')">
-        <span class="chev" :class="{ open: open.layers }">▸</span> Layers
-      </button>
-      <div v-show="open.layers" class="acc-body layers-body">
-        <div v-for="i in settings.layerCount" :key="i" class="layer">
-          <div class="layer-head">
-            <button
-              class="layer-tab" :class="{ active: settings.activeLayer === i - 1 }"
-              @click="settings.activeLayer = i - 1"
-            >Layer {{ i }}</button>
-            <template v-if="settings.colorMode === 3">
-              <input type="color" v-model="settings.layers[i - 1].color" class="layer-color" title="Layer color" />
-              <KeyBtn :path="`layers.${i - 1}.color`" />
-            </template>
-            <span v-if="settings.activeLayer === i - 1" class="tag">drag target</span>
+          <div class="btn-row mt-2">
+            <v-btn :prepend-icon="mdiPlus" size="small" variant="tonal" class="flex-grow-1 tt-none" @click="addMapping()">Add mapping</v-btn>
+            <v-btn :prepend-icon="mdiFlash" size="small" variant="tonal" class="flex-grow-1 tt-none" :disabled="!anyInputEnabled"
+              title="Add default mappings for every enabled input" @click="autoMap()">Auto-map</v-btn>
           </div>
-          <label class="row">
-            <span>Type</span>
-            <select v-model.number="settings.layers[i - 1].pattern">
-              <optgroup v-for="g in PATTERN_GROUPS" :key="g.label" :label="g.label">
-                <option v-for="t in g.items" :key="t.value" :value="t.value">{{ t.label }}</option>
-              </optgroup>
-            </select>
-            <KeyBtn :path="`layers.${i - 1}.pattern`" />
-          </label>
-          <label v-if="i > 1" class="row" title="How this layer combines with the layers below it. Mask blends below against above using this layer's pattern.">
-            <span>Combine</span>
-            <select v-model.number="settings.layers[i - 1].op">
-              <option v-for="o in LAYER_OPS" :key="o.value" :value="o.value">{{ o.label }}</option>
-            </select>
-            <KeyBtn :path="`layers.${i - 1}.op`" />
-          </label>
-          <label class="row">
-            <span>Frequency</span>
-            <input type="range" min="5" max="1000" step="1" v-model.number="settings.layers[i - 1].freq" />
-            <b>{{ Math.round(settings.layers[i - 1].freq) }}</b>
-            <KeyBtn :path="`layers.${i - 1}.freq`" />
-          </label>
-          <label class="row">
-            <span>Rotation</span>
-            <input type="range" min="-180" max="180" step="1"
-              :value="rotDeg(settings.layers[i - 1])"
-              @input="setRotDeg(settings.layers[i - 1], $event.target.value)" />
-            <b>{{ rotDeg(settings.layers[i - 1]) }}°</b>
-            <KeyBtn :path="`layers.${i - 1}.rot`" />
-          </label>
-          <label class="row">
-            <span>Offset X</span>
-            <input type="range" min="-1" max="1" step="0.005" v-model.number="settings.layers[i - 1].x" />
-            <b>{{ settings.layers[i - 1].x.toFixed(2) }}</b>
-            <KeyBtn :path="`layers.${i - 1}.x`" />
-          </label>
-          <label class="row">
-            <span>Offset Y</span>
-            <input type="range" min="-1" max="1" step="0.005" v-model.number="settings.layers[i - 1].y" />
-            <b>{{ settings.layers[i - 1].y.toFixed(2) }}</b>
-            <KeyBtn :path="`layers.${i - 1}.y`" />
-          </label>
-          <label class="row" title="Layer opacity: scales this layer's contribution to the composite">
-            <span>Opacity</span>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="settings.layers[i - 1].alpha" />
-            <b>{{ (settings.layers[i - 1].alpha ?? 1).toFixed(2) }}</b>
-            <KeyBtn :path="`layers.${i - 1}.alpha`" />
-          </label>
-        </div>
-      </div>
-    </section>
+
+          <!-- MIDI control surface -->
+          <div v-if="modState.midi.enabled || modState.midi.bindings.length" class="midi-block">
+            <div class="midi-title">
+              <span class="box-label">MIDI Control</span>
+              <select class="nsel profile-sel" :value="modState.midi.profile"
+                title="Load a controller profile" @change="applyMidiProfile($event.target.value)">
+                <option value="">Profile…</option>
+                <option v-for="p in MIDI_PROFILES" :key="p.value" :value="p.value">{{ p.label }}</option>
+              </select>
+            </div>
+            <div v-for="b in modState.midi.bindings" :key="b.id" class="bind-box">
+              <div class="bind-head">
+                <v-btn size="x-small" :variant="modState.midi.learnBindingId === b.id ? 'flat' : 'tonal'"
+                  :color="modState.midi.learnBindingId === b.id ? 'warning' : undefined" class="tt-none learn-btn"
+                  title="Click, then move a knob or press a button"
+                  @click="modState.midi.learnBindingId = modState.midi.learnBindingId === b.id ? null : b.id"
+                >{{ modState.midi.learnBindingId === b.id ? 'press…' : midiTriggerLabel(b) }}</v-btn>
+                <span class="arrow">→</span>
+                <select v-model="b.target" class="nsel" @change="resetMidiBindingRange(b)">
+                  <optgroup label="Continuous">
+                    <option v-for="t in midiContinuous" :key="t.value" :value="t.value">{{ t.label }}</option>
+                  </optgroup>
+                  <optgroup label="Options">
+                    <option v-for="t in MIDI_DISCRETE" :key="t.value" :value="t.value">{{ t.label }}</option>
+                  </optgroup>
+                  <optgroup label="Toggles">
+                    <option v-for="t in MIDI_TOGGLES" :key="t.value" :value="t.value">{{ t.label }}</option>
+                  </optgroup>
+                  <optgroup label="Actions">
+                    <option v-for="t in MIDI_ACTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+                  </optgroup>
+                </select>
+                <v-btn :icon="mdiClose" size="x-small" variant="text" color="error" title="Remove" @click="removeMidiBinding(b.id)" />
+              </div>
+              <div v-if="midiTargetIsParam(b)" class="map-line map-range">
+                <span>Range</span>
+                <input type="number" step="any" v-model.number="b.min" />
+                <input type="number" step="any" v-model.number="b.max" />
+              </div>
+            </div>
+            <v-btn :prepend-icon="mdiPlus" size="small" variant="tonal" block class="tt-none mt-1" @click="addMidiBinding()">Add MIDI control</v-btn>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Layers -->
+      <v-expansion-panel id="grp-layers" value="layers" title="Layers">
+        <v-expansion-panel-text>
+          <div v-for="i in settings.layerCount" :key="i" class="layer">
+            <div class="layer-head">
+              <v-btn size="x-small" :variant="settings.activeLayer === i - 1 ? 'flat' : 'tonal'"
+                :color="settings.activeLayer === i - 1 ? 'primary' : undefined" class="tt-none"
+                @click="settings.activeLayer = i - 1">Layer {{ i }}</v-btn>
+              <template v-if="settings.colorMode === 3">
+                <input type="color" v-model="settings.layers[i - 1].color" class="layer-color" title="Layer color" />
+                <KeyBtn :path="`layers.${i - 1}.color`" />
+              </template>
+              <span v-if="settings.activeLayer === i - 1" class="tag">drag target</span>
+            </div>
+            <div class="ctl">
+              <span class="lbl">Type</span>
+              <select v-model.number="settings.layers[i - 1].pattern" class="nsel">
+                <optgroup v-for="g in PATTERN_GROUPS" :key="g.label" :label="g.label">
+                  <option v-for="t in g.items" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </optgroup>
+              </select>
+              <KeyBtn :path="`layers.${i - 1}.pattern`" />
+            </div>
+            <div v-if="i > 1" class="ctl" title="How this layer combines with those below. Mask blends below vs above.">
+              <span class="lbl">Combine</span>
+              <select v-model.number="settings.layers[i - 1].op" class="nsel">
+                <option v-for="o in LAYER_OPS" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+              <KeyBtn :path="`layers.${i - 1}.op`" />
+            </div>
+            <div class="ctl">
+              <span class="lbl">Frequency</span>
+              <v-slider v-model="settings.layers[i - 1].freq" :min="5" :max="1000" :step="1" class="sl" />
+              <span class="val">{{ Math.round(settings.layers[i - 1].freq) }}</span>
+              <KeyBtn :path="`layers.${i - 1}.freq`" />
+            </div>
+            <div class="ctl">
+              <span class="lbl">Rotation</span>
+              <v-slider :model-value="rotDeg(settings.layers[i - 1])" :min="-180" :max="180" :step="1"
+                class="sl" @update:model-value="(v) => setRotDeg(settings.layers[i - 1], v)" />
+              <span class="val">{{ rotDeg(settings.layers[i - 1]) }}°</span>
+              <KeyBtn :path="`layers.${i - 1}.rot`" />
+            </div>
+            <div class="ctl">
+              <span class="lbl">Offset X</span>
+              <v-slider v-model="settings.layers[i - 1].x" :min="-1" :max="1" :step="0.005" class="sl" />
+              <span class="val">{{ settings.layers[i - 1].x.toFixed(2) }}</span>
+              <KeyBtn :path="`layers.${i - 1}.x`" />
+            </div>
+            <div class="ctl">
+              <span class="lbl">Offset Y</span>
+              <v-slider v-model="settings.layers[i - 1].y" :min="-1" :max="1" :step="0.005" class="sl" />
+              <span class="val">{{ settings.layers[i - 1].y.toFixed(2) }}</span>
+              <KeyBtn :path="`layers.${i - 1}.y`" />
+            </div>
+            <div class="ctl" title="Layer opacity: scales this layer's contribution">
+              <span class="lbl">Opacity</span>
+              <v-slider v-model="settings.layers[i - 1].alpha" :min="0" :max="1" :step="0.01" class="sl" />
+              <span class="val">{{ (settings.layers[i - 1].alpha ?? 1).toFixed(2) }}</span>
+              <KeyBtn :path="`layers.${i - 1}.alpha`" />
+            </div>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
 
     <footer>
       Moiré appears when a grating's frequency beats against another grating —
-      or against the pixel grid itself. Set anti-alias to
-      <em>Off</em> with a high frequency to see sampling moiré; switch to
-      <em>Smooth</em> or <em>Supersample</em> to reduce it.
+      or against the pixel grid itself. Set anti-alias to <em>Off</em> with a
+      high frequency to see sampling moiré; switch to <em>Smooth</em> or
+      <em>Supersample</em> to reduce it.
     </footer>
   </aside>
 </template>
@@ -623,7 +581,7 @@ function onDrop(i) {
   border-right: 1px solid #212129;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 header h1 {
   font-size: 17px;
@@ -643,7 +601,6 @@ header h1 {
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px 0;
-  margin: -4px 0;
   background: #101014;
 }
 .acc-nav button {
@@ -662,87 +619,96 @@ header h1 {
   border-color: #4c42a3;
   background: #241f45;
 }
-.acc-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+
+/* Compact expansion panels */
+.panels {
+  background: transparent;
 }
-.acc-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 2px;
+.panels :deep(.v-expansion-panel) {
+  background: transparent;
+  color: #c9c9d1;
+}
+.panels :deep(.v-expansion-panel-title) {
+  min-height: 0;
+  padding: 8px 4px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: #8a8a95;
-  background: none;
-  border: none;
   border-bottom: 1px solid #212129;
-  cursor: pointer;
-  text-align: left;
 }
-.acc-head:hover {
-  color: #c9c9d1;
+.panels :deep(.v-expansion-panel-title--active) {
+  color: #cfc8ff;
 }
-.chev {
-  display: inline-block;
-  font-size: 9px;
-  transition: transform 0.15s;
-  color: #6f6f7a;
-}
-.chev.open {
-  transform: rotate(90deg);
-}
-.acc-body {
+.panels :deep(.v-expansion-panel-text__wrapper) {
+  padding: 12px 2px 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
-.layers-body {
-  gap: 16px;
+.panels :deep(.v-expansion-panel__shadow) {
+  display: none;
 }
-.layer {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.row {
+
+.ctl {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 12.5px;
   color: #c9c9d1;
 }
-.row > span {
+.lbl {
   width: 74px;
   flex: none;
   color: #9a9aa5;
 }
-.row input[type='range'] {
-  flex: 1;
-  min-width: 0;
-  accent-color: #7c6cf0;
+.lbl.sm {
+  width: 54px;
+  font-size: 11px;
 }
-.row b {
+.unit {
+  font-size: 11.5px;
+  color: #75757f;
+}
+.val {
   width: 42px;
   flex: none;
   text-align: right;
   font-size: 11.5px;
-  font-weight: 500;
   color: #d7d7de;
   font-variant-numeric: tabular-nums;
 }
-select {
+.sl {
   flex: 1;
   min-width: 0;
-  padding: 5px 8px;
+}
+
+/* Native controls, styled to match Vuetify's outlined look */
+.nsel {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
   font-size: 12.5px;
   color: #e4e4e9;
   background: #1a1a21;
-  border: 1px solid #2c2c36;
+  border: 1px solid #3a3a46;
   border-radius: 6px;
+}
+.nsel:focus {
+  outline: none;
+  border-color: #7c6cf0;
+}
+.nnum {
+  width: 60px;
+  flex: none;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: #e4e4e9;
+  background: #1a1a21;
+  border: 1px solid #3a3a46;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
 }
 input[type='color'] {
   width: 34px;
@@ -753,59 +719,23 @@ input[type='color'] {
   background: none;
   cursor: pointer;
 }
-input[type='checkbox'] {
-  accent-color: #7c6cf0;
-  width: 15px;
-  height: 15px;
+
+.tt-none :deep(.v-btn__content),
+.tt-none {
+  text-transform: none;
+  letter-spacing: normal;
 }
 .preset-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
-button {
-  padding: 7px 8px;
-  font-size: 12px;
-  color: #d7d7de;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-button:hover:not(:disabled) {
-  background: #23232c;
-  border-color: #3a3a48;
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-button.accent {
-  background: #342e6e;
-  border-color: #4c42a3;
-  color: #e9e6ff;
-}
-button.accent:hover {
-  background: #3e3784;
-}
-button.wide {
-  width: 100%;
-  padding: 9px;
-}
-.rand-row {
+.btn-row {
+  display: flex;
   gap: 6px;
 }
-.rand-row button {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 4px;
-}
-.rand-row .hist-btn {
-  flex: none;
-  width: 36px;
-  font-size: 15px;
-  line-height: 1;
+.display-btn {
+  flex: 0 0 auto;
 }
 .rand-opts {
   display: grid;
@@ -821,59 +751,24 @@ button.wide {
   cursor: pointer;
 }
 .rand-opts input {
-  width: 12px !important;
-  height: 12px !important;
+  width: 12px;
+  height: 12px;
+  accent-color: #7c6cf0;
 }
-.slideshow-row {
-  font-size: 11.5px;
-  color: #9a9aa5;
-}
-.slideshow-row .slideshow-btn {
-  flex: 1;
-}
-.slideshow-row select {
-  flex: 1;
-}
-.slideshow-row .every {
-  width: 74px;
-  flex: none;
-}
-.slideshow-row input[type='number'] {
-  width: 52px;
-  padding: 3px 6px;
-  font-size: 12px;
-  color: #e4e4e9;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 6px;
-  font-variant-numeric: tabular-nums;
-}
+
 .keybtn {
   flex: none;
-  padding: 0 2px;
-  font-size: 12px;
-  line-height: 1;
-  color: #3f3f4c;
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: color 0.12s;
-}
-.keybtn:hover {
-  color: #a8a2d8;
-  background: none;
-  border: none;
-}
-.keybtn.has {
-  color: #7c6cf0;
-}
-.keybtn.on {
-  color: #ffd166;
 }
 .note {
   font-size: 11px;
   font-style: normal;
   color: #75757f;
+}
+.err {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #ff8a8a;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 .custom-box {
   display: flex;
@@ -891,7 +786,7 @@ button.wide {
   width: 100%;
   resize: vertical;
   padding: 7px 9px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 11.5px;
   line-height: 1.5;
   color: #d7f0d7;
@@ -907,41 +802,6 @@ button.wide {
   color: #a8a2d8;
   font-style: normal;
 }
-.err {
-  font-size: 11px;
-  line-height: 1.45;
-  color: #ff8a8a;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-}
-.setup-btn {
-  flex: none;
-  padding: 2px 8px;
-  font-size: 10px;
-  color: #8f86d8;
-  border-color: #35314f;
-}
-.beat-dot {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #2c2c36;
-  transition: background 0.05s;
-}
-.beat-dot.on {
-  background: #ffd166;
-  box-shadow: 0 0 8px rgba(255, 209, 102, 0.8);
-}
-.beat-every {
-  width: 52px;
-  padding: 3px 6px;
-  font-size: 12px;
-  color: #e4e4e9;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 6px;
-  font-variant-numeric: tabular-nums;
-}
 .meter {
   flex: 1;
   height: 6px;
@@ -955,6 +815,18 @@ button.wide {
   height: 100%;
   background: #7c6cf0;
   transition: width 0.08s linear;
+}
+.beat-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2c2c36;
+  transition: background 0.05s;
+}
+.beat-dot.on {
+  background: #ffd166;
+  box-shadow: 0 0 8px rgba(255, 209, 102, 0.8);
 }
 .map-box {
   display: flex;
@@ -972,16 +844,11 @@ button.wide {
 .map-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .map-handle {
   cursor: grab;
   color: #5c5c68;
-  font-size: 13px;
-  user-select: none;
-}
-.map-handle:active {
-  cursor: grabbing;
 }
 .map-key {
   flex: 1;
@@ -989,19 +856,6 @@ button.wide {
   font-weight: 600;
   letter-spacing: 0.05em;
   color: #8f86d8;
-}
-.map-icn {
-  flex: none;
-  padding: 1px 7px;
-  font-size: 11px;
-  color: #9a9aa5;
-  background: none;
-  border: 1px solid #2c2c36;
-  border-radius: 5px;
-}
-.map-icn.del:hover {
-  color: #ff8a8a;
-  border-color: rgba(255, 92, 92, 0.5);
 }
 .map-line {
   display: flex;
@@ -1014,37 +868,22 @@ button.wide {
   flex: none;
   color: #85858f;
 }
-.map-line select {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  padding: 4px 6px;
-}
 .map-range input[type='number'] {
   flex: 1;
   min-width: 0;
   width: 0;
-  padding: 4px 6px;
+  padding: 5px 6px;
   font-size: 12px;
   color: #e4e4e9;
   background: #1a1a21;
-  border: 1px solid #2c2c36;
+  border: 1px solid #3a3a46;
   border-radius: 5px;
   font-variant-numeric: tabular-nums;
 }
-.map-line input[type='range'] {
-  flex: 1;
-  min-width: 0;
-  accent-color: #7c6cf0;
-}
-.learn {
+.arrow {
   flex: none;
-  padding: 2px 8px;
-  font-size: 10px;
-}
-.learn.active {
-  border-color: #ffd166;
-  color: #ffd166;
+  color: #6f6f7a;
+  font-size: 11px;
 }
 .midi-block {
   display: flex;
@@ -1064,11 +903,9 @@ button.wide {
 }
 .profile-sel {
   flex: none;
-  width: auto;
-  min-width: 0;
   max-width: 62%;
   font-size: 11px;
-  padding: 3px 6px;
+  padding: 4px 6px;
 }
 .bind-box {
   display: flex;
@@ -1084,30 +921,20 @@ button.wide {
   align-items: center;
   gap: 6px;
 }
-.bind-head .learn {
+.learn-btn {
   min-width: 62px;
   font-variant-numeric: tabular-nums;
 }
-.bind-target {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  padding: 4px 6px;
+.layer {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-bottom: 6px;
 }
 .layer-head {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.layer-tab {
-  padding: 4px 10px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-}
-.layer-tab.active {
-  border-color: #7c6cf0;
-  color: #cfc8ff;
 }
 .layer-color {
   width: 26px !important;
