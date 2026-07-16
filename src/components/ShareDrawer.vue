@@ -15,6 +15,10 @@ import {
 } from '../gallery.js'
 import { modes, loadMode, removeMode, renameMode } from '../modes.js'
 import { recState } from '../recorder.js'
+import {
+  mdiImage, mdiRecordCircle, mdiStop, mdiLinkVariant, mdiQrcode,
+  mdiContentSave, mdiTune, mdiCog, mdiPlus, mdiCheck, mdiClose,
+} from '@mdi/js'
 
 defineEmits(['export', 'record', 'save', 'savemode'])
 
@@ -102,23 +106,25 @@ function editCollection() {
   <aside class="drawer">
     <section>
       <h2>Capture &amp; Share</h2>
-      <button class="wide" @click="$emit('export')">Export PNG</button>
-      <button class="wide" :class="{ rec: recState.active }" @click="$emit('record')">
-        <template v-if="recState.active">■ Stop recording · {{ recTime }}</template>
-        <template v-else>● Record video (WebM)</template>
-      </button>
-      <button class="wide" @click="copyShare()">
+      <v-btn block variant="tonal" class="tt-none mb-2" :prepend-icon="mdiImage" @click="$emit('export')">Export PNG</v-btn>
+      <v-btn
+        block variant="tonal" class="tt-none mb-2"
+        :color="recState.active ? 'error' : undefined"
+        :prepend-icon="recState.active ? mdiStop : mdiRecordCircle"
+        @click="$emit('record')"
+      >{{ recState.active ? 'Stop recording · ' + recTime : 'Record video (WebM)' }}</v-btn>
+      <v-btn block variant="tonal" class="tt-none mb-2" :prepend-icon="mdiLinkVariant" @click="copyShare()">
         {{ copiedId === 'current' ? 'Link copied!' : 'Copy share link' }}
-      </button>
-      <button class="wide" @click="toggleQR">
+      </v-btn>
+      <v-btn block variant="tonal" class="tt-none mb-2" :prepend-icon="mdiQrcode" @click="toggleQR">
         {{ qrVisible ? 'Hide QR code' : 'QR code' }}
-      </button>
+      </v-btn>
       <div v-if="qrVisible" class="qr-box">
         <canvas ref="qrCanvas" />
         <p class="note">Scan to open this exact pattern</p>
       </div>
-      <button class="accent wide" @click="$emit('save')">Save to gallery</button>
-      <button class="accent wide" @click="$emit('savemode')">Save mode…</button>
+      <v-btn block variant="flat" color="primary" class="tt-none mb-2" :prepend-icon="mdiContentSave" @click="$emit('save')">Save to gallery</v-btn>
+      <v-btn block variant="flat" color="primary" class="tt-none" :prepend-icon="mdiTune" @click="$emit('savemode')">Save mode…</v-btn>
     </section>
 
     <section v-if="modes.length">
@@ -135,35 +141,30 @@ function editCollection() {
           {{ m.name }}
         </span>
         <span v-if="i < 9" class="mode-key">{{ i + 1 }}</span>
-        <button :title="copiedId === m.id ? 'Copied!' : 'Copy share link'" @click="copyShare(m.snap, m.id)">
-          {{ copiedId === m.id ? '✓' : '🔗' }}
-        </button>
-        <button title="Delete" @click="removeMode(m.id)">✕</button>
+        <v-btn
+          :icon="copiedId === m.id ? mdiCheck : mdiLinkVariant" size="x-small" variant="text"
+          :title="copiedId === m.id ? 'Copied!' : 'Copy share link'" @click="copyShare(m.snap, m.id)"
+        />
+        <v-btn :icon="mdiClose" size="x-small" variant="text" title="Delete" @click="removeMode(m.id)" />
       </div>
     </section>
 
     <section v-if="gallery.length">
       <div class="gallery-head">
         <h2>Gallery</h2>
-        <button
+        <v-btn
           v-if="galleryView.filter !== 'all' && galleryView.filter !== 'uncat'"
-          class="col-edit" title="Rename or delete this collection"
-          @click="editCollection()"
-        >⚙</button>
+          :icon="mdiCog" size="x-small" variant="text"
+          title="Rename or delete this collection" @click="editCollection()"
+        />
       </div>
       <div class="col-tabs">
-        <button :class="{ active: galleryView.filter === 'all' }" @click="galleryView.filter = 'all'">
-          All
-        </button>
-        <button
-          v-for="c in collections" :key="c"
-          :class="{ active: galleryView.filter === c }"
-          @click="galleryView.filter = c"
-        >{{ c }}</button>
-        <button :class="{ active: galleryView.filter === 'uncat' }" @click="galleryView.filter = 'uncat'">
-          Uncategorized
-        </button>
-        <button class="col-new" title="New collection" @click="newCollection()">＋</button>
+        <v-chip-group v-model="galleryView.filter" mandatory selected-class="chip-active" class="chips">
+          <v-chip value="all" size="x-small" label>All</v-chip>
+          <v-chip v-for="c in collections" :key="c" :value="c" size="x-small" label>{{ c }}</v-chip>
+          <v-chip value="uncat" size="x-small" label>Uncategorized</v-chip>
+        </v-chip-group>
+        <v-btn :icon="mdiPlus" size="x-small" variant="tonal" title="New collection" @click="newCollection()" />
       </div>
       <div v-if="filteredGallery.length" class="gallery">
         <div v-for="e in filteredGallery" :key="e.id" class="entry">
@@ -173,10 +174,15 @@ function editCollection() {
             @click="loadFromGallery(e)"
           />
           <div class="entry-actions">
-            <button :title="copiedId === e.id ? 'Copied!' : 'Copy share link'" @click="copyShare(e.snap, e.id)">
-              {{ copiedId === e.id ? '✓' : '🔗' }}
-            </button>
-            <button title="Delete" @click="removeFromGallery(e.id)">✕</button>
+            <v-btn
+              :icon="copiedId === e.id ? mdiCheck : mdiLinkVariant" size="x-small" variant="flat"
+              class="entry-act-btn" :title="copiedId === e.id ? 'Copied!' : 'Copy share link'"
+              @click="copyShare(e.snap, e.id)"
+            />
+            <v-btn
+              :icon="mdiClose" size="x-small" variant="flat" class="entry-act-btn"
+              title="Delete" @click="removeFromGallery(e.id)"
+            />
           </div>
           <select
             class="entry-col" title="Collection"
@@ -223,35 +229,9 @@ h2 {
   letter-spacing: 0.09em;
   color: #6f6f7a;
 }
-button {
-  padding: 7px 8px;
-  font-size: 12px;
-  color: #d7d7de;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-button:hover {
-  background: #23232c;
-  border-color: #3a3a48;
-}
-button.accent {
-  background: #342e6e;
-  border-color: #4c42a3;
-  color: #e9e6ff;
-}
-button.accent:hover {
-  background: #3e3784;
-}
-button.wide {
-  width: 100%;
-  padding: 9px;
-}
-button.rec {
-  border-color: rgba(255, 92, 92, 0.55);
-  color: #ff8a8a;
+.tt-none :deep(.v-btn__content) {
+  text-transform: none;
+  letter-spacing: normal;
 }
 .qr-box {
   display: flex;
@@ -313,11 +293,6 @@ button.rec {
   border-radius: 4px;
   padding: 0 3px;
 }
-.mode-row button {
-  flex: none;
-  padding: 2px 6px;
-  font-size: 11px;
-}
 .gallery-head {
   display: flex;
   align-items: center;
@@ -326,30 +301,22 @@ button.rec {
 .gallery-head h2 {
   flex: 1;
 }
-.col-edit {
-  padding: 2px 7px;
-  font-size: 12px;
-}
 .col-tabs {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
 }
-.col-tabs button {
-  padding: 3px 8px;
-  font-size: 10.5px;
-  color: #9a9aa5;
-  background: #1a1a21;
-  border: 1px solid #2c2c36;
-  border-radius: 999px;
+.col-tabs .chips {
+  flex: 1;
+  min-width: 0;
 }
-.col-tabs button.active {
+.col-tabs :deep(.v-chip) {
+  font-size: 10.5px;
+}
+.col-tabs :deep(.v-chip.chip-active) {
   color: #cfc8ff;
   border-color: #7c6cf0;
   background: #241f45;
-}
-.col-tabs .col-new {
-  color: #8f86d8;
 }
 .gallery {
   display: grid;
@@ -396,9 +363,7 @@ button.rec {
 .entry:hover .entry-actions {
   opacity: 1;
 }
-.entry-actions button {
-  padding: 2px 6px;
-  font-size: 11px;
-  background: rgba(12, 12, 16, 0.8);
+.entry-act-btn {
+  background: rgba(12, 12, 16, 0.8) !important;
 }
 </style>

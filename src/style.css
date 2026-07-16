@@ -12,6 +12,17 @@ body,
   overflow: hidden;
 }
 
+/* Let the Vuetify app wrapper fill the viewport so the flex layout inside
+   keeps working exactly as before. */
+.v-application,
+.v-application__wrap {
+  height: 100%;
+  min-height: 0 !important;
+}
+.v-application {
+  background: #0b0b0f !important;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: #0b0b0f;
